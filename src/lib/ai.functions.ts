@@ -440,5 +440,19 @@ export const resolveAction = createServerFn({ method: "POST" })
       },
     );
 
-    return { status: finalStatus as ("completed" | "failed"), message: JSON.stringify(result) };
+if (isError) {
+  return {
+    status: "failed" as const,
+    message:
+      (result as { error?: string; message?: string }).message ??
+      (result as { error?: string }).error ??
+      "The invoice could not be sent.",
+  };
+}
+
+return {
+  status: "completed" as const,
+  message: "Invoice sent successfully.",
+};
+  
   });
