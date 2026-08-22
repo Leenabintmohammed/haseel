@@ -26,282 +26,256 @@ export interface InvoicePDFData {
 
 export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
-  
-  // Embed Standard Fonts
+  const page = pdfDoc.addPage([595.28, 841.89]);
+  const { height, width } = page.getSize();
+
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  // Colors Palette
-  const primaryColor = rgb(0.12, 0.16, 0.23);   // #1E293B Dark Slate
-  const secondaryColor = rgb(0.38, 0.45, 0.55); // #64748B Slate Gray
-  const lightBgColor = rgb(0.97, 0.98, 0.99);   // #F8FAFC Very Light Slate
-  const borderColor = rgb(0.89, 0.91, 0.94);    // #E2E8F0 Line Border
-  const successColor = rgb(0.09, 0.63, 0.42);   // #16A34A Green
-  const warningColor = rgb(0.88, 0.40, 0.12);   // #EA580C Orange
-
-  let page = pdfDoc.addPage([595.28, 841.89]); // A4 Size
-  const { width, height } = page.getSize();
-  
-  const margin = 40;
-  const contentWidth = width - margin * 2;
-  let y = height - margin;
-
-  // Helper for multi-page handling
-  const checkPageSpace = (requiredSpace: number) => {
-    if (y - requiredSpace < margin) {
-      page = pdfDoc.addPage([595.28, 841.89]);
-      y = height - margin;
-      return true;
-    }
-    return false;
+  // لوحة الألوان المحدّثة
+  const colors = {
+    blackBg: rgb(0.05, 0.05, 0.05),       // أسود للشريط الجانبي
+    whiteText: rgb(1, 1, 1),              // أبيض ناصع (تم تطبيقه)
+    rotanaGreen: rgb(0.02, 0.59, 0.41),   // أخضر روتانا للتمويج والتمييز
+    rotanaLightBg: rgb(0.92, 0.97, 0.94), // خلفية شارة PAID
+    sidebarMuted: rgb(0.70, 0.73, 0.76),  // رمادي فاتح للنصوص الفرعية
+    bodyText: rgb(0.12, 0.14, 0.17),      // أسود ناعم للجسم الرئيسي
+    mutedText: rgb(0.45, 0.48, 0.52),     // رمادي الوصف
+    border: rgb(0.88, 0.90, 0.92),        // حدود فاصلة
   };
 
-  // 1. Header Section (Company Info & Invoice Title)
+  // --- 1. Left Dark Sidebar (الشريط الجانبي) ---
+  const sidebarWidth = 170;
+  page.drawRectangle({
+    x: 0,
+    y: 0,
+    width: sidebarWidth,
+    height: height,
+    color: colors.blackBg,
+  });
+
+  let sideY = height - 45;
+
+  // اسم الشركة (أبيض عريض)
   page.drawText(data.company_name.toUpperCase(), {
-    x: margin,
-    y,
-    size: 18,
+    x: 22,
+    y: sideY,
+    size: 10.5,
     font: fontBold,
-    color: primaryColor,
+    color: colors.whiteText,
   });
-
-  page.drawText("INVOICE", {
-    x: width - margin - fontBold.widthOfTextAtSize("INVOICE", 24),
-    y,
-    size: 24,
-    font: fontBold,
-    color: primaryColor,
-  });
-
-  y -= 18;
+  sideY -= 14;
 
   if (data.company_address) {
-    const addressLines = wrapText(data.company_address, 40);
+    const addressLines = wrapText(data.company_address, 26);
     for (const line of addressLines) {
-      page.drawText(line, { x: margin, y, size: 9, font: fontRegular, color: secondaryColor });
-      y -= 12;
+      page.drawText(line, { x: 22, y: sideY, size: 7.5, font: fontRegular, color: colors.sidebarMuted });
+      sideY -= 11;
     }
   }
 
-  // Invoice Number Badge / Meta right aligned
-  const invMetaX = width - margin - 150;
-  let invMetaY = height - margin - 25;
-  
-  page.drawText(`Invoice No:`, { x: invMetaX, y: invMetaY, size: 9, font: fontBold, color: secondaryColor });
-  page.drawText(`#${data.invoice_number}`, { x: invMetaX + 65, y: invMetaY, size: 9, font: fontRegular, color: primaryColor });
-  invMetaY -= 14;
+  sideY -= 25;
 
-  page.drawText(`Issue Date:`, { x: invMetaX, y: invMetaY, size: 9, font: fontBold, color: secondaryColor });
-  page.drawText(data.issue_date, { x: invMetaX + 65, y: invMetaY, size: 9, font: fontRegular, color: primaryColor });
-  invMetaY -= 14;
+  // بيانات الفاتورة
+  const drawSidebarField = (label: string, value: string) => {
+    page.drawText(label.toUpperCase(), { x: 22, y: sideY, size: 7, font: fontBold, color: colors.rotanaGreen });
+    sideY -= 10;
+    // القيمة باللون الأبيض
+    page.drawText(value, { x: 22, y: sideY, size: 8.5, font: fontRegular, color: colors.whiteText });
+    sideY -= 18;
+  };
 
-  page.drawText(`Due Date:`, { x: invMetaX, y: invMetaY, size: 9, font: fontBold, color: secondaryColor });
-  page.drawText(data.due_date, { x: invMetaX + 65, y: invMetaY, size: 9, font: fontRegular, color: primaryColor });
+  drawSidebarField("Invoice Reference", `#${data.invoice_number}`);
+  drawSidebarField("Issue Date", data.issue_date);
+  drawSidebarField("Payment Due", data.due_date);
 
-  y = Math.min(y, invMetaY) - 20;
+  sideY -= 10;
 
-  // Divider Line
-  page.drawLine({
-    start: { x: margin, y },
-    end: { x: width - margin, y },
-    thickness: 1,
-    color: borderColor,
-  });
-
-  y -= 20;
-
-  // 2. Bill To Section
-  page.drawText("BILL TO", { x: margin, y, size: 9, font: fontBold, color: secondaryColor });
-  y -= 14;
-
-  page.drawText(data.client_name, { x: margin, y, size: 11, font: fontBold, color: primaryColor });
-  y -= 14;
+  // بيانات العميل (اسم العميل بالأبيض)
+  page.drawText("BILLED TO", { x: 22, y: sideY, size: 7, font: fontBold, color: colors.rotanaGreen });
+  sideY -= 12;
+  page.drawText(data.client_name, { x: 22, y: sideY, size: 9, font: fontBold, color: colors.whiteText });
+  sideY -= 12;
 
   if (data.client_email) {
-    page.drawText(data.client_email, { x: margin, y, size: 9, font: fontRegular, color: secondaryColor });
-    y -= 14;
-  }
-
-  y -= 15;
-
-  // 3. Items Table Header
-  const tableHeaderHeight = 24;
-  page.drawRectangle({
-    x: margin,
-    y: y - tableHeaderHeight,
-    width: contentWidth,
-    height: tableHeaderHeight,
-    color: lightBgColor,
-  });
-
-  const colX = {
-    desc: margin + 10,
-    qty: margin + 300,
-    unit: margin + 380,
-    total: width - margin - 10,
-  };
-
-  page.drawText("DESCRIPTION", { x: colX.desc, y: y - 16, size: 8, font: fontBold, color: secondaryColor });
-  
-  const qtyHead = "QTY";
-  page.drawText(qtyHead, { x: colX.qty - fontBold.widthOfTextAtSize(qtyHead, 8), y: y - 16, size: 8, font: fontBold, color: secondaryColor });
-
-  const unitHead = "UNIT PRICE";
-  page.drawText(unitHead, { x: colX.unit - fontBold.widthOfTextAtSize(unitHead, 8), y: y - 16, size: 8, font: fontBold, color: secondaryColor });
-
-  const totalHead = "TOTAL";
-  page.drawText(totalHead, { x: colX.total - fontBold.widthOfTextAtSize(totalHead, 8), y: y - 16, size: 8, font: fontBold, color: secondaryColor });
-
-  y -= tableHeaderHeight + 8;
-
-  // 4. Line Items Rendering
-  for (const item of data.items) {
-    checkPageSpace(30);
-
-    const descLines = wrapText(item.description, 45);
-    const itemRowHeight = Math.max(descLines.length * 12, 18);
-
-    // Draw Description (Multi-line safe)
-    let descY = y;
-    for (const line of descLines) {
-      page.drawText(line, { x: colX.desc, y: descY, size: 9, font: fontRegular, color: primaryColor });
-      descY -= 12;
+    const emailLines = wrapText(data.client_email, 24);
+    for (const line of emailLines) {
+      page.drawText(line, { x: 22, y: sideY, size: 7.5, font: fontRegular, color: colors.sidebarMuted });
+      sideY -= 11;
     }
-
-    // Right-aligned quantities & prices
-    const qtyTxt = item.quantity.toString();
-    page.drawText(qtyTxt, {
-      x: colX.qty - fontRegular.widthOfTextAtSize(qtyTxt, 9),
-      y,
-      size: 9,
-      font: fontRegular,
-      color: primaryColor,
-    });
-
-    const priceTxt = formatAmount(item.unit_price, data.currency);
-    page.drawText(priceTxt, {
-      x: colX.unit - fontRegular.widthOfTextAtSize(priceTxt, 9),
-      y,
-      size: 9,
-      font: fontRegular,
-      color: primaryColor,
-    });
-
-    const lineTotalTxt = formatAmount(item.line_total, data.currency);
-    page.drawText(lineTotalTxt, {
-      x: colX.total - fontRegular.widthOfTextAtSize(lineTotalTxt, 9),
-      y,
-      size: 9,
-      font: fontBold,
-      color: primaryColor,
-    });
-
-    y -= itemRowHeight + 6;
-
-    // Subtle row divider line
-    page.drawLine({
-      start: { x: margin, y: y + 2 },
-      end: { x: width - margin, y: y + 2 },
-      thickness: 0.5,
-      color: lightBgColor,
-    });
   }
 
-  y -= 10;
-  checkPageSpace(120);
+  // --- 2. Main Content Area (المنطقة الرئيسية) ---
+  const mainX = sidebarWidth + 30;
+  const mainWidth = width - mainX - 30;
+  let mainY = height - 45;
 
-  // 5. Summary & Totals Box
-  const summaryWidth = 200;
-  const summaryX = width - margin - summaryWidth;
-
-  const drawSummaryRow = (label: string, amountStr: string, isBold = false) => {
-    const font = isBold ? fontBold : fontRegular;
-    const fontSize = isBold ? 10 : 9;
-    const textColor = isBold ? primaryColor : secondaryColor;
-
-    page.drawText(label, { x: summaryX, y, size: fontSize, font, color: textColor });
-    
-    const amtWidth = font.widthOfTextAtSize(amountStr, fontSize);
-    page.drawText(amountStr, {
-      x: width - margin - amtWidth,
-      y,
-      size: fontSize,
-      font,
-      color: primaryColor,
-    });
-    y -= 16;
-  };
-
-  drawSummaryRow("Subtotal", formatAmount(data.subtotal, data.currency));
-
-  if (data.discount > 0) {
-    drawSummaryRow("Discount", `-${formatAmount(data.discount, data.currency)}`);
-  }
-
-  if (data.tax > 0) {
-    drawSummaryRow("Tax", formatAmount(data.tax, data.currency));
-  }
-
-  y -= 4;
-  page.drawLine({
-    start: { x: summaryX, y: y + 10 },
-    end: { x: width - margin, y: y + 10 },
-    thickness: 1,
-    color: borderColor,
+  page.drawText("INVOICE", {
+    x: mainX,
+    y: mainY,
+    size: 18,
+    font: fontBold,
+    color: colors.rotanaGreen,
   });
 
-  // Total Due Highlights Block
-  const totalBoxHeight = 26;
-  page.drawRectangle({
-    x: summaryX - 5,
-    y: y - totalBoxHeight + 10,
-    width: summaryWidth + 5,
-    height: totalBoxHeight,
-    color: lightBgColor,
-  });
-
-  y -= 2;
-  drawSummaryRow("Total Due", formatAmount(data.amount, data.currency), true);
-
-  // 6. Payment Status Badge & Notes Section
-  y -= 15;
+  // Status Badge
   const balance = data.amount - data.paid_amount;
   const isPaid = balance <= 0;
+  const badgeText = isPaid ? "PAID" : "OUTSTANDING";
+  const badgeWidth = fontBold.widthOfTextAtSize(badgeText, 7.5) + 14;
 
-  // Status Badge Block
-  const badgeText = isPaid ? "✓ PAID IN FULL" : `OUTSTANDING: ${formatAmount(balance, data.currency)}`;
-  const badgeColor = isPaid ? successColor : warningColor;
-  
   page.drawRectangle({
-    x: margin,
-    y: y - 4,
-    width: fontBold.widthOfTextAtSize(badgeText, 9) + 16,
-    height: 18,
-    color: lightBgColor,
-    borderColor: badgeColor,
-    borderWidth: 1,
+    x: width - 30 - badgeWidth,
+    y: mainY - 1,
+    width: badgeWidth,
+    height: 16,
+    color: isPaid ? colors.rotanaLightBg : rgb(0.98, 0.93, 0.93),
   });
 
   page.drawText(badgeText, {
-    x: margin + 8,
-    y: y,
-    size: 9,
+    x: width - 30 - badgeWidth + 7,
+    y: mainY + 3,
+    size: 7.5,
     font: fontBold,
-    color: badgeColor,
+    color: isPaid ? colors.rotanaGreen : rgb(0.8, 0.2, 0.2),
   });
 
-  y -= 35;
+  mainY -= 35;
 
-  // Notes Block
+  // --- 3. Items Table ---
+  const cols = {
+    desc: mainX,
+    qty: mainX + mainWidth - 150,
+    price: mainX + mainWidth - 90,
+    total: mainX + mainWidth,
+  };
+
+  page.drawText("ITEM DESCRIPTION", { x: cols.desc, y: mainY, size: 7, font: fontBold, color: colors.mutedText });
+  page.drawText("QTY", { x: cols.qty, y: mainY, size: 7, font: fontBold, color: colors.mutedText });
+
+  const priceLabel = "PRICE";
+  page.drawText(priceLabel, {
+    x: cols.price - fontBold.widthOfTextAtSize(priceLabel, 7),
+    y: mainY, size: 7, font: fontBold, color: colors.mutedText
+  });
+
+  const totalLabel = "TOTAL";
+  page.drawText(totalLabel, {
+    x: cols.total - fontBold.widthOfTextAtSize(totalLabel, 7),
+    y: mainY, size: 7, font: fontBold, color: colors.mutedText
+  });
+
+  mainY -= 8;
+
+  page.drawLine({
+    start: { x: mainX, y: mainY },
+    end: { x: mainX + mainWidth, y: mainY },
+    thickness: 1,
+    color: colors.rotanaGreen,
+  });
+
+  mainY -= 16;
+
+  for (const item of data.items) {
+    const formattedPrice = formatAmount(item.unit_price, data.currency);
+    const formattedTotal = formatAmount(item.line_total, data.currency);
+
+    page.drawText(item.description.substring(0, 36), {
+      x: cols.desc,
+      y: mainY,
+      size: 8.5,
+      font: fontRegular,
+      color: colors.bodyText,
+    });
+
+    page.drawText(item.quantity.toString(), {
+      x: cols.qty,
+      y: mainY,
+      size: 8.5,
+      font: fontRegular,
+      color: colors.bodyText,
+    });
+
+    page.drawText(formattedPrice, {
+      x: cols.price - fontRegular.widthOfTextAtSize(formattedPrice, 8.5),
+      y: mainY,
+      size: 8.5,
+      font: fontRegular,
+      color: colors.bodyText,
+    });
+
+    page.drawText(formattedTotal, {
+      x: cols.total - fontBold.widthOfTextAtSize(formattedTotal, 8.5),
+      y: mainY,
+      size: 8.5,
+      font: fontBold,
+      color: colors.bodyText,
+    });
+
+    mainY -= 10;
+
+    page.drawLine({
+      start: { x: mainX, y: mainY },
+      end: { x: mainX + mainWidth, y: mainY },
+      thickness: 0.5,
+      color: colors.border,
+    });
+
+    mainY -= 14;
+  }
+
+  mainY -= 5;
+
+  // --- 4. Totals Summary ---
+  const summaryX = mainX + mainWidth - 170;
+
+  const renderRow = (label: string, value: string, isBold = false) => {
+    const font = isBold ? fontBold : fontRegular;
+    const size = isBold ? 9.5 : 8;
+    const textColor = isBold ? colors.rotanaGreen : colors.mutedText;
+
+    page.drawText(label, { x: summaryX, y: mainY, size, font, color: textColor });
+    page.drawText(value, {
+      x: cols.total - font.widthOfTextAtSize(value, size),
+      y: mainY,
+      size,
+      font,
+      color: isBold ? colors.rotanaGreen : colors.bodyText,
+    });
+    mainY -= 14;
+  };
+
+  renderRow("Subtotal", formatAmount(data.subtotal, data.currency));
+
+  if (data.discount > 0) {
+    renderRow("Discount", `-${formatAmount(data.discount, data.currency)}`);
+  }
+
+  if (data.tax > 0) {
+    renderRow("Tax", formatAmount(data.tax, data.currency));
+  }
+
+  mainY -= 2;
+
+  page.drawLine({
+    start: { x: summaryX, y: mainY + 10 },
+    end: { x: cols.total, y: mainY + 10 },
+    thickness: 1,
+    color: colors.border,
+  });
+
+  renderRow("Amount Due", formatAmount(data.amount, data.currency), true);
+
+  // --- 5. Notes ---
   if (data.notes) {
-    checkPageSpace(50);
-    page.drawText("NOTES / PAYMENT INSTRUCTIONS", { x: margin, y, size: 8, font: fontBold, color: secondaryColor });
-    y -= 12;
+    mainY -= 15;
+    page.drawText("NOTES / TERMS", { x: mainX, y: mainY, size: 7, font: fontBold, color: colors.mutedText });
+    mainY -= 10;
 
-    const noteLines = wrapText(data.notes, 90);
+    const noteLines = wrapText(data.notes, 55);
     for (const line of noteLines) {
-      page.drawText(line, { x: margin, y, size: 8.5, font: fontRegular, color: secondaryColor });
-      y -= 11;
+      page.drawText(line, { x: mainX, y: mainY, size: 7.5, font: fontRegular, color: colors.mutedText });
+      mainY -= 10;
     }
   }
 
