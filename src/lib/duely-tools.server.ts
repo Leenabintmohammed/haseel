@@ -538,19 +538,335 @@ case "send_invoice": {
     body: JSON.stringify({
       from: "Haseel <billing@gohaseel.com>",
       to: [recipient],
-      subject: `Invoice ${invoice.invoice_number} from ${profile?.company_name ?? "Haseel"}`,
-      html: `
-        <p>Hello ${client?.name ?? "there"},</p>
+subject: `Invoice ${invoice.invoice_number} from ${profile?.company_name ?? "Your Company"}`,      html: `
+    <div style="
+        width: 100%;
+        padding: 40px 16px;
+        box-sizing: border-box;
+      ">
 
-        <p>Please find your invoice attached.</p>
+        <table
+          role="presentation"
+          width="100%"
+          cellpadding="0"
+          cellspacing="0"
+          border="0"
+          style="
+            max-width: 620px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid #e5e9e7;
+          "
+        >
 
-        <p>
-          <strong>Invoice:</strong> ${invoice.invoice_number}<br />
-          <strong>Amount:</strong> ${invoice.amount} ${invoice.currency ?? "AED"}<br />
-          <strong>Due date:</strong> ${invoice.due_date?.slice(0, 10) ?? "—"}
-        </p>
+          <!-- Header -->
+          <tr>
+            <td style="
+              padding: 28px 32px;
+              background: #ffffff;
+              border-bottom: 1px solid #edf0ee;
+            ">
 
-        <p>Thank you.</p>
+              <table
+                role="presentation"
+                width="100%"
+                cellpadding="0"
+                cellspacing="0"
+                border="0"
+              >
+                <tr>
+                  <td>
+                    <div style="
+                      font-size: 22px;
+                      font-weight: 700;
+                      letter-spacing: -0.5px;
+                      color: #17201c;
+                    ">
+                      ${profile?.company_name ?? "Your Company"}
+                    </div>
+
+                    <div style="
+                      margin-top: 4px;
+                      font-size: 13px;
+                      color: #7a8580;
+                    ">
+                      Invoice
+                    </div>
+                  </td>
+
+                  <td align="right">
+                    <div style="
+                      display: inline-block;
+                      padding: 7px 12px;
+                      background: #eef8f2;
+                      color: #16734a;
+                      border-radius: 999px;
+                      font-size: 12px;
+                      font-weight: 600;
+                    ">
+                      PAYMENT DUE
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- Main content -->
+          <tr>
+            <td style="padding: 36px 32px 32px;">
+
+              <div style="
+                font-size: 14px;
+                color: #7a8580;
+                margin-bottom: 8px;
+              ">
+                Invoice ${invoice.invoice_number}
+              </div>
+
+              <div style="
+                font-size: 30px;
+                line-height: 1.2;
+                font-weight: 700;
+                letter-spacing: -0.8px;
+                color: #17201c;
+                margin-bottom: 24px;
+              ">
+                ${new Intl.NumberFormat("en-AE", {
+                  style: "currency",
+                  currency: invoice.currency ?? "AED",
+                  minimumFractionDigits: 2,
+                }).format(num(invoice.amount))}
+              </div>
+
+              <p style="
+                margin: 0 0 24px;
+                font-size: 15px;
+                line-height: 1.7;
+                color: #46514c;
+              ">
+                Hello ${client?.name ?? "there"},
+              </p>
+
+              <p style="
+                margin: 0 0 28px;
+                font-size: 15px;
+                line-height: 1.7;
+                color: #46514c;
+              ">
+                Please find your invoice attached to this email.
+                We kindly ask you to review the invoice and arrange payment
+                by the due date.
+              </p>
+
+              <!-- Invoice summary -->
+              <table
+                role="presentation"
+                width="100%"
+                cellpadding="0"
+                cellspacing="0"
+                border="0"
+                style="
+                  background: #f8faf9;
+                  border: 1px solid #e6ebe8;
+                  border-radius: 12px;
+                  overflow: hidden;
+                  margin-bottom: 28px;
+                "
+              >
+
+                <tr>
+                  <td style="
+                    padding: 16px 18px;
+                    font-size: 13px;
+                    color: #7a8580;
+                    border-bottom: 1px solid #e6ebe8;
+                  ">
+                    Invoice number
+                  </td>
+
+                  <td align="right" style="
+                    padding: 16px 18px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #17201c;
+                    border-bottom: 1px solid #e6ebe8;
+                  ">
+                    ${invoice.invoice_number}
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="
+                    padding: 16px 18px;
+                    font-size: 13px;
+                    color: #7a8580;
+                    border-bottom: 1px solid #e6ebe8;
+                  ">
+                    Issue date
+                  </td>
+
+                  <td align="right" style="
+                    padding: 16px 18px;
+                    font-size: 14px;
+                    color: #17201c;
+                    border-bottom: 1px solid #e6ebe8;
+                  ">
+                    ${invoice.issue_date?.slice(0, 10) ?? "—"}
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="
+                    padding: 16px 18px;
+                    font-size: 13px;
+                    color: #7a8580;
+                    border-bottom: 1px solid #e6ebe8;
+                  ">
+                    Due date
+                  </td>
+
+                  <td align="right" style="
+                    padding: 16px 18px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #16734a;
+                    border-bottom: 1px solid #e6ebe8;
+                  ">
+                    ${invoice.due_date?.slice(0, 10) ?? "—"}
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="
+                    padding: 16px 18px;
+                    font-size: 13px;
+                    color: #7a8580;
+                  ">
+                    Amount due
+                  </td>
+
+                  <td align="right" style="
+                    padding: 16px 18px;
+                    font-size: 16px;
+                    font-weight: 700;
+                    color: #17201c;
+                  ">
+                    ${new Intl.NumberFormat("en-AE", {
+                      style: "currency",
+                      currency: invoice.currency ?? "AED",
+                      minimumFractionDigits: 2,
+                    }).format(num(invoice.amount))}
+                  </td>
+                </tr>
+
+              </table>
+
+              <!-- Attachment notice -->
+              <table
+                role="presentation"
+                width="100%"
+                cellpadding="0"
+                cellspacing="0"
+                border="0"
+                style="
+                  margin-bottom: 28px;
+                "
+              >
+                <tr>
+                  <td style="
+                    padding: 16px 18px;
+                    background: #f3f7f5;
+                    border-left: 4px solid #16734a;
+                    border-radius: 6px;
+                  ">
+
+                    <div style="
+                      font-size: 14px;
+                      font-weight: 600;
+                      color: #17201c;
+                      margin-bottom: 4px;
+                    ">
+                      Invoice attached
+                    </div>
+
+                    <div style="
+                      font-size: 13px;
+                      line-height: 1.6;
+                      color: #66716c;
+                    ">
+                      Your invoice is attached to this email as a PDF.
+                    </div>
+
+                  </td>
+                </tr>
+              </table>
+
+              <p style="
+                margin: 0 0 24px;
+                font-size: 14px;
+                line-height: 1.7;
+                color: #66716c;
+              ">
+                If you have any questions regarding this invoice,
+                please contact the sender directly.
+              </p>
+
+              <p style="
+                margin: 0;
+                font-size: 15px;
+                line-height: 1.7;
+                color: #46514c;
+              ">
+                Thank you for your business.
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="
+              padding: 24px 32px;
+              background: #fafcfb;
+              border-top: 1px solid #edf0ee;
+            ">
+
+              <div style="
+                font-size: 13px;
+                font-weight: 600;
+                color: #17201c;
+                margin-bottom: 5px;
+              ">
+                Sent with Haseel
+              </div>
+
+              <div style="
+                font-size: 12px;
+                line-height: 1.6;
+                color: #89928e;
+              ">
+                Smart business operations, powered by AI.
+              </div>
+
+              <div style="
+                margin-top: 12px;
+                font-size: 12px;
+                color: #a0a8a4;
+              ">
+                This is an automated email. Please do not reply directly
+                to this message.
+              </div>
+
+            </td>
+          </tr>
+
+        </table>
+
+      </div>
       `,
       attachments: [
         {
