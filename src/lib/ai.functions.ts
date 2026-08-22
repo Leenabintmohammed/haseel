@@ -74,66 +74,169 @@ export function createApprovalSignature(input: ApprovalSignatureInput) {
     .digest("hex");
 }
 
-export function isValidApprovalSignature(input: ApprovalSignatureInput, signature: string | null | undefined) {
+export function isValidApprovalSignature(
+  input: ApprovalSignatureInput,
+  signature: string | null | undefined,
+) {
   if (!signature) return false;
+
   const expected = createApprovalSignature(input);
   const actual = Buffer.from(signature, "hex");
   const expectedBytes = Buffer.from(expected, "hex");
-  return actual.length === expectedBytes.length && timingSafeEqual(actual, expectedBytes);
+
+  return (
+    actual.length === expectedBytes.length &&
+    timingSafeEqual(actual, expectedBytes)
+  );
 }
 
-export function computeEntityStateHash(entity: Record<string, unknown> | null | undefined): string {
+export function computeEntityStateHash(
+  entity: Record<string, unknown> | null | undefined,
+): string {
   if (!entity) return "";
 
   const stateString = JSON.stringify({
-    status: entity['status'],
-    amount: entity['amount'],
-    paid_amount: entity['paid_amount'],
-    updated_at: entity['updated_at'],
+    status: entity["status"],
+    amount: entity["amount"],
+    paid_amount: entity["paid_amount"],
+    updated_at: entity["updated_at"],
   });
 
-  return Array.from(stateString).reduce((hash, char) => ((hash << 5) - hash) + char.charCodeAt(0), 0).toString(36);
+  return Array.from(stateString)
+    .reduce(
+      (hash, char) => (hash << 5) - hash + char.charCodeAt(0),
+      0,
+    )
+    .toString(36);
 }
 
 export async function buildApprovalActionInput(
-  ctx: { supabase: { from: (table: string) => any }; userId?: string },
+  ctx: {
+    supabase: { from: (table: string) => any };
+    userId?: string;
+  },
   toolName: string,
   params: Record<string, unknown>,
 ) {
   const entityLookup: Record<
     string,
-    Array<{ table: string; idKey: string; entityLabel: string; byId?: boolean; ownerScoped?: boolean }>
+    Array<{
+      table: string;
+      idKey: string;
+      entityLabel: string;
+      byId?: boolean;
+      ownerScoped?: boolean;
+    }>
   > = {
-    send_invoice: [{ table: "invoices", idKey: "invoice_id", entityLabel: "invoice", byId: true }],
-    cancel_invoice: [{ table: "invoices", idKey: "invoice_id", entityLabel: "invoice", byId: true }],
-    send_reminder: [{ table: "reminders", idKey: "reminder_id", entityLabel: "reminder", byId: true }],
-    update_company_policy: [{ table: "company_policies", idKey: "policy_key", entityLabel: "policy", byId: false, ownerScoped: true }],
-    create_payment_plan: [{ table: "invoices", idKey: "invoice_id", entityLabel: "invoice", byId: true }],
-    cancel_payment_plan: [{ table: "payment_plans", idKey: "plan_id", entityLabel: "payment plan", byId: true }],
-    pause_payment_plan: [{ table: "payment_plans", idKey: "plan_id", entityLabel: "payment plan", byId: true }],
-    resume_payment_plan: [{ table: "payment_plans", idKey: "plan_id", entityLabel: "payment plan", byId: true }],
-    reverse_payment: [{ table: "payments", idKey: "payment_id", entityLabel: "payment", byId: true }],
+    send_invoice: [
+      {
+        table: "invoices",
+        idKey: "invoice_id",
+        entityLabel: "invoice",
+        byId: true,
+      },
+    ],
+    cancel_invoice: [
+      {
+        table: "invoices",
+        idKey: "invoice_id",
+        entityLabel: "invoice",
+        byId: true,
+      },
+    ],
+    send_reminder: [
+      {
+        table: "reminders",
+        idKey: "reminder_id",
+        entityLabel: "reminder",
+        byId: true,
+      },
+    ],
+    update_company_policy: [
+      {
+        table: "company_policies",
+        idKey: "policy_key",
+        entityLabel: "policy",
+        byId: false,
+        ownerScoped: true,
+      },
+    ],
+    create_payment_plan: [
+      {
+        table: "invoices",
+        idKey: "invoice_id",
+        entityLabel: "invoice",
+        byId: true,
+      },
+    ],
+    cancel_payment_plan: [
+      {
+        table: "payment_plans",
+        idKey: "plan_id",
+        entityLabel: "payment plan",
+        byId: true,
+      },
+    ],
+    pause_payment_plan: [
+      {
+        table: "payment_plans",
+        idKey: "plan_id",
+        entityLabel: "payment plan",
+        byId: true,
+      },
+    ],
+    resume_payment_plan: [
+      {
+        table: "payment_plans",
+        idKey: "plan_id",
+        entityLabel: "payment plan",
+        byId: true,
+      },
+    ],
+    reverse_payment: [
+      {
+        table: "payments",
+        idKey: "payment_id",
+        entityLabel: "payment",
+        byId: true,
+      },
+    ],
   };
 
   const candidates = entityLookup[toolName];
+
   if (!candidates) {
-    return { ok: true, entity_type: null, entity_id: null, state_hash: null };
+    return {
+      ok: true,
+      entity_type: null,
+      entity_id: null,
+      state_hash: null,
+    };
   }
 
   for (const lookup of candidates) {
     const entityId = String(params[lookup.idKey] ?? "").trim();
+
     if (!entityId) continue;
 
     let query = ctx.supabase.from(lookup.table).select("*");
+
     if (lookup.byId === false) {
       query = query.eq("policy_key", entityId);
-      if (ctx.userId) query = query.eq("owner_id", ctx.userId);
+
+      if (ctx.userId) {
+        query = query.eq("owner_id", ctx.userId);
+      }
     } else {
       query = query.eq("id", entityId);
-      if (ctx.userId) query = query.eq("owner_id", ctx.userId);
+
+      if (ctx.userId) {
+        query = query.eq("owner_id", ctx.userId);
+      }
     }
 
     const { data: entity, error } = await query.maybeSingle();
+
     if (error) {
       return {
         ok: false,
@@ -155,11 +258,14 @@ export async function buildApprovalActionInput(
   }
 
   const firstCandidate = candidates[0];
+
   return {
     ok: false,
     error: {
       code: "entity_not_found",
-      message: `The ${firstCandidate?.entityLabel ?? "target entity"} could not be found. Approval was not created.`,
+      message: `The ${
+        firstCandidate?.entityLabel ?? "target entity"
+      } could not be found. Approval was not created.`,
     },
   };
 }
@@ -171,49 +277,65 @@ export async function buildApprovalActionInput(
  * - Action has not expired
  * - Entity state has not changed (optional state hash validation)
  */
-export async function validateActionBeforeExecution(ctx: any, action: any) {
+export async function validateActionBeforeExecution(
+  ctx: any,
+  action: any,
+) {
   const { TOOL_AUTONOMY } = await import("./duely-tools.server");
+
   const expectedAutonomy = TOOL_AUTONOMY[action.tool_name];
-  if (expectedAutonomy !== "approval_required" || action.autonomy_level !== expectedAutonomy) {
+
+  if (
+    expectedAutonomy !== "approval_required" ||
+    action.autonomy_level !== expectedAutonomy
+  ) {
     return {
       valid: false,
       reason: "invalid_autonomy",
-      message: "This action is not currently authorized for approval execution.",
+      message:
+        "This action is not currently authorized for approval execution.",
     };
   }
 
   try {
-    if (!isValidApprovalSignature({
-      owner_id: action.owner_id,
-      intent: action.intent,
-      tool_name: action.tool_name,
-      autonomy_level: action.autonomy_level,
-      parameters: action.parameters,
-      entity_type: action.entity_type,
-      entity_id: action.entity_id,
-      state_hash: action.state_hash,
-      expires_at: action.expires_at,
-      status: action.status,
-    }, action.server_signature)) {
+    if (
+      !isValidApprovalSignature(
+        {
+          owner_id: action.owner_id,
+          intent: action.intent,
+          tool_name: action.tool_name,
+          autonomy_level: action.autonomy_level,
+          parameters: action.parameters,
+          entity_type: action.entity_type,
+          entity_id: action.entity_id,
+          state_hash: action.state_hash,
+          expires_at: action.expires_at,
+          status: action.status,
+        },
+        action.server_signature,
+      )
+    ) {
       return {
         valid: false,
         reason: "invalid_signature",
-        message: "This approval was not created by the server approval flow.",
+        message:
+          "This approval was not created by the server approval flow.",
       };
     }
   } catch {
     return {
       valid: false,
       reason: "signature_unavailable",
-      message: "Approval signing is not configured on the server.",
+      message:
+        "Approval signing is not configured on the server.",
     };
   }
 
   const now = new Date();
 
-  // Check expiration (default 15 minutes if expires_at is set)
   if (action.expires_at) {
     const expiresAt = new Date(action.expires_at);
+
     if (now > expiresAt) {
       return {
         valid: false,
@@ -223,10 +345,8 @@ export async function validateActionBeforeExecution(ctx: any, action: any) {
     }
   }
 
-  // If entity_id is specified, verify entity still exists and state hasn't changed
   if (action.entity_id && action.entity_type) {
     try {
-      // Fetch current entity state
       const { data: entity, error } = await ctx.supabase
         .from(action.entity_type)
         .select("*")
@@ -250,7 +370,6 @@ export async function validateActionBeforeExecution(ctx: any, action: any) {
         };
       }
 
-      // If state_hash exists, verify entity hasn't changed
       if (action.state_hash) {
         const currentStateHash = computeEntityStateHash(entity);
 
@@ -266,7 +385,9 @@ export async function validateActionBeforeExecution(ctx: any, action: any) {
       return {
         valid: false,
         reason: "validation_error",
-        message: `Error validating entity: ${(err as Error).message}`,
+        message: `Error validating entity: ${
+          (err as Error).message
+        }`,
       };
     }
   }
@@ -274,14 +395,70 @@ export async function validateActionBeforeExecution(ctx: any, action: any) {
   return { valid: true };
 }
 
+function getApprovalSuccessMessage(
+  toolName: string,
+  result: unknown,
+): string {
+  const data =
+    result && typeof result === "object"
+      ? (result as Record<string, unknown>)
+      : {};
+
+  switch (toolName) {
+    case "send_invoice":
+      return typeof data.recipient === "string" &&
+        data.recipient.length > 0
+        ? `Invoice sent successfully to ${data.recipient}.`
+        : "Invoice sent successfully.";
+
+    case "send_reminder":
+      return typeof data.recipient === "string" &&
+        data.recipient.length > 0
+        ? `Payment reminder sent successfully to ${data.recipient}.`
+        : "Payment reminder sent successfully.";
+
+    case "create_payment_plan":
+      return "Payment plan created successfully.";
+
+    case "cancel_payment_plan":
+      return "Payment plan cancelled successfully.";
+
+    case "pause_payment_plan":
+      return "Payment plan paused successfully.";
+
+    case "resume_payment_plan":
+      return "Payment plan resumed successfully.";
+
+    case "cancel_invoice":
+      return "Invoice cancelled successfully.";
+
+    case "reverse_payment":
+      return "Payment reversed successfully.";
+
+    case "update_company_policy":
+      return "Company policy updated successfully.";
+
+    default:
+      return "Action completed successfully.";
+  }
+}
+
 export const duelyChat = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => ChatInput.parse(input))
   .handler(async ({ data, context }): Promise<ChatResult> => {
-    const { runOrchestrator } = await import("./duely-orchestrator.server");
+    const { runOrchestrator } = await import(
+      "./duely-orchestrator.server"
+    );
+
     const focus = data.focus
-      ? { type: data.focus.type, id: data.focus.id, summary: data.focus.summary ?? "" }
+      ? {
+          type: data.focus.type,
+          id: data.focus.id,
+          summary: data.focus.summary ?? "",
+        }
       : null;
+
     return runOrchestrator({
       supabase: context.supabase,
       userId: context.userId,
@@ -296,77 +473,134 @@ export const duelyChat = createServerFn({ method: "POST" })
 export const resolveAction = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({ action_id: z.string(), decision: z.enum(["approve", "reject"]) }).parse(input),
+    z
+      .object({
+        action_id: z.string(),
+        decision: z.enum(["approve", "reject"]),
+      })
+      .parse(input),
   )
   .handler(async ({ data, context }) => {
-    const { executeTool } = await import("./duely-tools.server");
+    const { executeTool } = await import(
+      "./duely-tools.server"
+    );
     const { audit } = await import("./finance.server");
-    
+
     const { data: action } = await context.supabase
       .from("ai_actions")
       .select("*")
       .eq("id", data.action_id)
       .eq("owner_id", context.userId)
       .maybeSingle();
+
     if (!action) {
-      return { status: "error" as const, message: "action_not_found" };
+      return {
+        status: "error" as const,
+        message: "action_not_found",
+      };
     }
+
     if (action.status !== "awaiting_approval") {
-      return { status: "error" as const, message: "already_resolved" };
+      return {
+        status: "error" as const,
+        message: "already_resolved",
+      };
     }
 
     if (data.decision === "reject") {
-      const validation = await validateActionBeforeExecution(context, action);
+      const validation = await validateActionBeforeExecution(
+        context,
+        action,
+      );
+
       if (!validation.valid) {
-        return { status: "error" as const, message: validation.message ?? "Validation failed" };
+        return {
+          status: "error" as const,
+          message: validation.message ?? "Validation failed",
+        };
       }
+
       const resolvedAt = new Date().toISOString();
-      await context.supabase.from("ai_actions").update({
-        status: "rejected",
-        resolved_at: resolvedAt,
-        server_signature: createApprovalSignature({
-          owner_id: action.owner_id,
-          intent: action.intent,
-          tool_name: action.tool_name,
-          autonomy_level: action.autonomy_level,
-          parameters: action.parameters,
-          entity_type: action.entity_type,
-          entity_id: action.entity_id,
-          state_hash: action.state_hash,
-          expires_at: action.expires_at,
+
+      await context.supabase
+        .from("ai_actions")
+        .update({
           status: "rejected",
-        }) as never,
-      }).eq("id", action.id);
+          resolved_at: resolvedAt,
+          server_signature: createApprovalSignature({
+            owner_id: action.owner_id,
+            intent: action.intent,
+            tool_name: action.tool_name,
+            autonomy_level: action.autonomy_level,
+            parameters: action.parameters,
+            entity_type: action.entity_type,
+            entity_id: action.entity_id,
+            state_hash: action.state_hash,
+            expires_at: action.expires_at,
+            status: "rejected",
+          }) as never,
+        })
+        .eq("id", action.id);
+
       await audit(
-        { supabase: context.supabase, userId: context.userId, actor: "human" },
+        {
+          supabase: context.supabase,
+          userId: context.userId,
+          actor: "human",
+        },
         {
           entity_type: "ai_action",
           entity_id: action.id,
           action: "ai_action.rejected",
-          after_state: { status: "rejected", tool: action.tool_name },
+          after_state: {
+            status: "rejected",
+            tool: action.tool_name,
+          },
         },
       );
-      return { status: "rejected" as const, message: "" };
+
+      return {
+        status: "rejected" as const,
+        message: "",
+      };
     }
 
-    // Validate action is still executable
-    const validation = await validateActionBeforeExecution(context, action);
+    const validation = await validateActionBeforeExecution(
+      context,
+      action,
+    );
+
     if (!validation.valid) {
-      await context.supabase.from("ai_actions").update({ 
-        status: "failed", 
-        error: validation.message ?? null,
-        resolved_at: new Date().toISOString(),
-      }).eq("id", action.id);
+      await context.supabase
+        .from("ai_actions")
+        .update({
+          status: "failed",
+          error: validation.message ?? null,
+          resolved_at: new Date().toISOString(),
+        })
+        .eq("id", action.id);
+
       await audit(
-        { supabase: context.supabase, userId: context.userId, actor: "system" },
+        {
+          supabase: context.supabase,
+          userId: context.userId,
+          actor: "system",
+        },
         {
           entity_type: "ai_action",
           entity_id: action.id,
           action: "ai_action.failed_validation",
-          metadata: { reason: validation.reason, message: validation.message },
+          metadata: {
+            reason: validation.reason,
+            message: validation.message,
+          },
         },
       );
-      return { status: "error" as const, message: validation.message ?? "Validation failed" };
+
+      return {
+        status: "error" as const,
+        message: validation.message ?? "Validation failed",
+      };
     }
 
     const { data: claimedAction } = await context.supabase
@@ -391,20 +625,29 @@ export const resolveAction = createServerFn({ method: "POST" })
       .eq("status", "awaiting_approval")
       .select("id")
       .maybeSingle();
+
     if (!claimedAction) {
-      return { status: "error" as const, message: "already_resolved" };
+      return {
+        status: "error" as const,
+        message: "already_resolved",
+      };
     }
 
-    // Execute the tool
-    const result = await executeTool(action.tool_name, (action.parameters ?? {}) as Record<string, unknown>, {
-      supabase: context.supabase,
-      userId: context.userId,
-      actor: "human",
-    });
+    const result = await executeTool(
+      action.tool_name,
+      (action.parameters ?? {}) as Record<string, unknown>,
+      {
+        supabase: context.supabase,
+        userId: context.userId,
+        actor: "human",
+      },
+    );
 
-    const isError = (result as { error?: string })?.error !== undefined;
+    const isError =
+      (result as { error?: string })?.error !== undefined;
+
     const finalStatus = isError ? "failed" : "completed";
-    
+
     await context.supabase
       .from("ai_actions")
       .update({
@@ -421,70 +664,58 @@ export const resolveAction = createServerFn({ method: "POST" })
           expires_at: action.expires_at,
           status: finalStatus,
         }) as never,
+
+        // Keep the complete raw result internally for audit/debugging.
         result: result as never,
         new_state: result as never,
+
         origin: "human_approved",
         resolved_at: new Date().toISOString(),
+
         error: isError ? JSON.stringify(result) : null,
       })
       .eq("id", action.id);
 
     await audit(
-      { supabase: context.supabase, userId: context.userId, actor: "human" },
+      {
+        supabase: context.supabase,
+        userId: context.userId,
+        actor: "human",
+      },
       {
         entity_type: "ai_action",
         entity_id: action.id,
         action: `ai_action.${finalStatus}`,
-        after_state: { status: finalStatus, tool: action.tool_name },
-        metadata: isError ? { error: result } : { success: true },
+        after_state: {
+          status: finalStatus,
+          tool: action.tool_name,
+        },
+        metadata: isError
+          ? { error: result }
+          : { success: true },
       },
     );
-function getApprovalSuccessMessage(
-  toolName: string,
-  result: unknown,
-): string {
-  const data = result as Record<string, unknown>;
 
-  switch (toolName) {
-    case "send_invoice":
-      return data.recipient
-        ? `Invoice sent successfully to ${data.recipient}.`
-        : "Invoice sent successfully.";
+    if (isError) {
+      const errorResult = result as {
+        error?: string;
+        message?: string;
+      };
 
-    case "send_reminder":
-      return data.recipient
-        ? `Payment reminder sent successfully to ${data.recipient}.`
-        : "Payment reminder sent successfully.";
+      return {
+        status: "failed" as const,
+        message:
+          errorResult.message ??
+          errorResult.error ??
+          "The action could not be completed.",
+      };
+    }
 
-    case "create_payment_plan":
-      return "Payment plan created successfully.";
-
-    case "cancel_payment_plan":
-      return "Payment plan cancelled successfully.";
-
-    case "pause_payment_plan":
-      return "Payment plan paused successfully.";
-
-    case "resume_payment_plan":
-      return "Payment plan resumed successfully.";
-
-    case "cancel_invoice":
-      return "Invoice cancelled successfully.";
-
-    case "reverse_payment":
-      return "Payment reversed successfully.";
-
-    default:
-      return "Action completed successfully.";
-  }
-}
-return {
-  status: finalStatus as ("completed" | "failed"),
-  message: isError
-    ? (result as { error?: string; message?: string }).message ??
-      (result as { error?: string }).error ??
-      "The action could not be completed."
-    : getApprovalSuccessMessage(action.tool_name, result),
-};
-  
+    return {
+      status: "completed" as const,
+      message: getApprovalSuccessMessage(
+        action.tool_name,
+        result,
+      ),
+    };
   });
