@@ -439,20 +439,52 @@ export const resolveAction = createServerFn({ method: "POST" })
         metadata: isError ? { error: result } : { success: true },
       },
     );
+function getApprovalSuccessMessage(
+  toolName: string,
+  result: unknown,
+): string {
+  const data = result as Record<string, unknown>;
 
-if (isError) {
-  return {
-    status: "failed" as const,
-    message:
-      (result as { error?: string; message?: string }).message ??
-      (result as { error?: string }).error ??
-      "The invoice could not be sent.",
-  };
+  switch (toolName) {
+    case "send_invoice":
+      return data.recipient
+        ? `Invoice sent successfully to ${data.recipient}.`
+        : "Invoice sent successfully.";
+
+    case "send_reminder":
+      return data.recipient
+        ? `Payment reminder sent successfully to ${data.recipient}.`
+        : "Payment reminder sent successfully.";
+
+    case "create_payment_plan":
+      return "Payment plan created successfully.";
+
+    case "cancel_payment_plan":
+      return "Payment plan cancelled successfully.";
+
+    case "pause_payment_plan":
+      return "Payment plan paused successfully.";
+
+    case "resume_payment_plan":
+      return "Payment plan resumed successfully.";
+
+    case "cancel_invoice":
+      return "Invoice cancelled successfully.";
+
+    case "reverse_payment":
+      return "Payment reversed successfully.";
+
+    default:
+      return "Action completed successfully.";
+  }
 }
-
 return {
-  status: "completed" as const,
-  message: "Invoice sent successfully.",
+  status: finalStatus as ("completed" | "failed"),
+  message: isError
+    ? (result as { error?: string; message?: string }).message ??
+      (result as { error?: string }).error ??
+      "The action could not be completed."
+    : getApprovalSuccessMessage(action.tool_name, result),
 };
   
   });
