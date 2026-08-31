@@ -381,11 +381,16 @@ export async function runOrchestrator(args: {
       "List invoices, optionally filtered by status or client",
       z.object({ status: z.string().optional(), client_id: z.string().optional() }),
     ),
-    send_invoice: makeTool(
-      "send_invoice",
-      "Send an invoice to the client by email after owner approval",
-      z.object({ invoice_id: z.string() }),
-    ),
+send_invoice: makeTool(
+  "send_invoice",
+  "Send an invoice to the client by email or WhatsApp after owner approval. Use WhatsApp when the user explicitly requests WhatsApp.",
+  z.object({
+    invoice_id: z.string(),
+    channel: z
+      .enum(["email", "whatsapp"])
+      .optional(),
+  }),
+),
     record_payment: makeTool(
       "record_payment",
       "Record a payment received against an invoice",
