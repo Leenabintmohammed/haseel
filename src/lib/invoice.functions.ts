@@ -44,3 +44,27 @@ export const recordInvoicePaymentFn = createServerFn({ method: "POST" })
     const { executeTool } = await import("./duely-tools.server");
     return (await executeTool("record_payment", data, { supabase: context.supabase, userId: context.userId, actor: "human" })) as any;
   });
+
+export const sendInvoiceFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        invoice_id: z.string().uuid(),
+        channel: z.enum(["email", "whatsapp"]).default("email"),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { executeTool } = await import("./duely-tools.server");
+
+    return (await executeTool(
+      "send_invoice",
+      data,
+      {
+        supabase: context.supabase,
+        userId: context.userId,
+        actor: "human",
+      },
+    )) as any;
+  });
