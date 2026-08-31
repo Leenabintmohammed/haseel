@@ -608,8 +608,36 @@ export async function executeTool(name: string, params: Record<string, unknown>,
       if (error) return { error: error.message };
       return { reminder: data, invoice_number: inv.invoice_number, client: inv.clients };
     }
+
+
+
 case "send_invoice": {
   const id = p["invoice_id"] as string;
+
+  if (!id) {
+    return fail(
+      "validation_failed",
+      "invoice_id is required.",
+    );
+  }
+
+  const channel = String(
+    p["channel"] ?? "email",
+  ).toLowerCase();
+
+  if (channel === "whatsapp") {
+    return await sendWhatsAppInvoice(
+      ctx,
+      id,
+    );
+  }
+
+  if (channel !== "email") {
+    return fail(
+      "validation_failed",
+      'channel must be "email" or "whatsapp".',
+    );
+  }
   if (!id) return fail("validation_failed", "invoice_id is required.");
 
   const { data: invoice, error: invoiceError } = await ctx.supabase
