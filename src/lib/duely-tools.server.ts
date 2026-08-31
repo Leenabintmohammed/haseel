@@ -22,6 +22,7 @@ import {
   round2,
 } from "./finance-core";
 import { fail, isFailure } from "./finance-errors";
+import { sendWhatsAppInvoice } from "./whatsapp.server";
 
 export type Autonomy = "auto" | "approval_required" | "human_only";
 
@@ -223,69 +224,230 @@ export async function executeTool(name: string, params: Record<string, unknown>,
         .limit(50);
       return { clients: data ?? [] };
     }
-    case "create_invoice": {
-      const client = await resolveClient(ctx, p as never);
-      if (!client) return { error: "client_not_found", hint: "Ask the user to confirm the client, or create it first." };
-      if ("__ambiguous" in client) return { error: "multiple_clients_match", candidates: client['__ambiguous'] };
-      const rawItems = (p['items'] as { description?: string; amount?: number; quantity?: number; unit_price?: number }[] | undefined) ?? null;
-      const totals = computeInvoiceTotals({
-        items: rawItems?.length
-          ? rawItems
-          : [{ description: (p['description'] as string) ?? "Services", amount: num(p['amount']) }],
-        discount_type: (p['discount_type'] as string) ?? "none",
-        discount_value: num(p['discount_value']),
-        tax_rate: num(p['tax_rate']),
-      });
-      if (!(totals.total > 0)) return fail("validation_failed", "Invoice total must be greater than zero.");
-      const currency = (p['currency'] as string) ?? (await defaultCurrency(ctx));
-      const terms = p['due_in_days'] !== undefined ? num(p['due_in_days'], 30) : await defaultTerms(ctx);
-      const due = (p['due_date'] as string) ?? addDays(terms);
-      const issue = (p['issue_date'] as string) ?? today();
-      if (due < issue) return fail("validation_failed", "Due date cannot be before the issue date.");
-      const { data, error } = await ctx.supabase
-        .from("invoices")
-        .insert({
-          owner_id: ctx.userId,
-          client_id: client['id'],
-          invoice_number: (p['invoice_number'] as string) ?? (await nextInvoiceNumber(ctx)),
-          amount: totals.total,
-          subtotal: totals.subtotal,
-          discount_type: totals.discount_type,
-          discount_value: totals.discount_value,
-          discount_amount: totals.discount_amount,
-          tax_rate: totals.tax_rate,
-          tax_amount: totals.tax_amount,
-          currency,
-          status: "draft",
-          issue_date: issue,
-          due_date: due,
-          remaining_balance: totals.total,
-          items: totals.items as never,
-          notes: (p['notes'] as string) ?? null,
-        })
-        .select("*")
-        .single();
-      if (error) return fail("internal_error", error.message);
-      if (totals.items.length)
-        await ctx.supabase.from("invoice_items").insert(
-          totals.items.map((it, i) => ({
-            owner_id: ctx.userId,
-            invoice_id: data.id,
-            description: it.description,
-            quantity: it.quantity,
-            unit_price: it.unit_price,
-            line_total: it.line_total,
-            sort_order: i,
-          })),
-        );
-      await audit(ctx, {
-        entity_type: "invoice",
-        entity_id: data.id,
-        action: "invoice.created",
-        after_state: { amount: totals.total, currency, due_date: due },
-      });
-      return { created: true, invoice: data, client_name: client['name'] };
+  case "create_invoice": {
+  const {
+    count: invoiceCount,
+    error: invoiceCountError,
+  } = await ctx.supabase
+    .from("invoices")
+    .select("id", {
+      count: "exact",
+      head: true,
+    })
+    .eq("owner_id", ctx.userId)
+    .eq("is_demo", false);
+
+  if (invoiceCountError) {
+    return fail(
+      "internal_error",
+      invoiceCountError.message,
+    );
+  }
+
+  if ((invoiceCount ?? 0) >= 3) {
+    return fail(
+      "limit_reached",
+      "MVP invoice limit reached. This account can have up to 3 invoices.",
+      {
+        limit: 3,
+        used: invoiceCount ?? 0,
+      },
+    );
+  }
+
+  const client = await resolveClient(
+    ctx,
+    p as never,
+  );
+
+  if (!client) {
+    return {
+      error: "client_not_found",
+      hint:
+        "Ask the user to confirm the client, or create it first.",
+    };
+  }
+
+  if ("__ambiguous" in client) {
+    return {
+      error: "multiple_clients_match",
+      candidates: client["__ambiguous"],
+    };
+  }
+
+  const rawItems =
+    (p["items"] as
+      | {
+          description?: string;
+          amount?: number;
+          quantity?: number;
+          unit_price?: number;
+        }[]
+      | undefined) ?? null;
+
+  const totals = computeInvoiceTotals({
+    items: rawItems?.length
+      ? rawItems
+      : [
+          {
+            description:
+              (p["description"] as string) ??
+              "Services",
+            amount: num(p["amount"]),
+          },
+        ],
+    discount_type:
+      (p["discount_type"] as string) ??
+      "none",
+    discount_value: num(
+      p["discount_value"],
+    ),
+    tax_rate: num(p["tax_rate"]),
+  });
+
+  if (!(totals.total > 0)) {
+    return fail(
+      "validation_failed",
+      "Invoice total must be greater than zero.",
+    );
+  }
+
+  const currency =
+    (p["currency"] as string) ??
+    (await defaultCurrency(ctx));
+
+  const terms =
+    p["due_in_days"] !== undefined
+      ? num(p["due_in_days"], 30)
+      : await defaultTerms(ctx);
+
+  const due =
+    (p["due_date"] as string) ??
+    addDays(terms);
+
+  const issue =
+    (p["issue_date"] as string) ??
+    today();
+
+  if (due < issue) {
+    return fail(
+      "validation_failed",
+      "Due date cannot be before the issue date.",
+    );
+  }
+
+  const invoiceNumber =
+    (p["invoice_number"] as string) ??
+    (await nextInvoiceNumber(ctx));
+
+  const { data, error } =
+    await ctx.supabase
+      .from("invoices")
+      .insert({
+        owner_id: ctx.userId,
+        client_id: client["id"],
+        invoice_number: invoiceNumber,
+        amount: totals.total,
+        subtotal: totals.subtotal,
+        discount_type:
+          totals.discount_type,
+        discount_value:
+          totals.discount_value,
+        discount_amount:
+          totals.discount_amount,
+        tax_rate: totals.tax_rate,
+        tax_amount: totals.tax_amount,
+        currency,
+        status: "draft",
+        issue_date: issue,
+        due_date: due,
+        remaining_balance:
+          totals.total,
+        items: totals.items as never,
+        notes:
+          (p["notes"] as string) ??
+          null,
+        is_demo: false,
+      })
+      .select("*")
+      .single();
+
+  if (error) {
+    if (
+      error.message?.includes(
+        "INVOICE_LIMIT_REACHED",
+      )
+    ) {
+      return fail(
+        "limit_reached",
+        "MVP invoice limit reached. This account can have up to 3 invoices.",
+        {
+          limit: 3,
+          used: 3,
+        },
+      );
     }
+
+    return fail(
+      "internal_error",
+      error.message,
+    );
+  }
+
+  if (totals.items.length) {
+    const { error: itemsError } =
+      await ctx.supabase
+        .from("invoice_items")
+        .insert(
+          totals.items.map(
+            (it, i) => ({
+              owner_id: ctx.userId,
+              invoice_id: data.id,
+              description:
+                it.description,
+              quantity: it.quantity,
+              unit_price:
+                it.unit_price,
+              line_total:
+                it.line_total,
+              sort_order: i,
+            }),
+          ),
+        );
+
+    if (itemsError) {
+      // The invoice itself was created successfully,
+      // but line items failed. Return a controlled
+      // error instead of pretending creation was complete.
+      return fail(
+        "internal_error",
+        itemsError.message,
+        {
+          invoice_id: data.id,
+        },
+      );
+    }
+  }
+
+  await audit(ctx, {
+    entity_type: "invoice",
+    entity_id: data.id,
+    action: "invoice.created",
+    after_state: {
+      amount: totals.total,
+      currency,
+      due_date: due,
+      invoice_number:
+        data.invoice_number,
+    },
+  });
+
+  return {
+    created: true,
+    invoice: data,
+    client_name: client["name"],
+  };
+}
     case "update_invoice": {
       const id = p['invoice_id'] as string;
       if (!id) return fail("validation_failed", "invoice_id is required.");
