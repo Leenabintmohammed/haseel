@@ -33,7 +33,7 @@ export function useInvoices() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("invoices")
-        .select("*, clients(id,name,company_name,email)")
+        .select("*, clients(id,name,company_name,email,phone)")
         .order("due_date", { ascending: true });
       if (error) throw error;
       return data ?? [];
@@ -47,7 +47,7 @@ export function useInvoiceDetails(invoiceId?: string) {
     enabled: Boolean(invoiceId),
     queryFn: async () => {
       const [invoiceResult, itemsResult, paymentsResult, plansResult] = await Promise.all([
-        supabase.from("invoices").select("*, clients(id,name,company_name,email)").eq("id", invoiceId!).maybeSingle(),
+        supabase.from("invoices").select("*, clients(id,name,company_name,email,phone)").eq("id", invoiceId!).maybeSingle(),
         supabase.from("invoice_items").select("*").eq("invoice_id", invoiceId!).order("sort_order", { ascending: true }),
         supabase.from("payments").select("*").eq("invoice_id", invoiceId!).order("payment_date", { ascending: false }),
         supabase.from("payment_plans").select("*, payment_plan_installments(*)").eq("invoice_id", invoiceId!).order("created_at", { ascending: false }),
@@ -174,8 +174,13 @@ export type InvoiceRow = {
   due_date: string;
   issue_date: string;
   client_id: string;
-  clients?: { id: string; name: string; company_name: string | null } | null;
-};
+  clients?: {
+  id: string;
+  name: string;
+  company_name: string | null;
+  email?: string | null;
+  phone?: string | null;
+} | null;};
 
 export function isOverdue(inv: { status: string; due_date: string }) {
   return inv.status === "overdue" || (!["paid", "cancelled", "draft"].includes(inv.status) && inv.due_date < today());
