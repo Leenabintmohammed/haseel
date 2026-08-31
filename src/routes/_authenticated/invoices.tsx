@@ -12,6 +12,8 @@ import {
   Search,
   Sparkles,
   X,
+Mail,
+MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/duely/StatusBadge";
@@ -27,6 +29,7 @@ import { useI18n } from "@/lib/i18n";
 import { useDuely } from "@/lib/duely-context";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { sendInvoiceFn } from "@/lib/invoice.functions";
 
 export const Route = createFileRoute("/_authenticated/invoices")({
   head: () => ({
@@ -505,22 +508,11 @@ function InvoiceDrawer({
                 </div>
               ))}
             </div>
-            <div className="mt-5 flex gap-2">
-              <Button
-                size="sm"
-                disabled={Number(invoice.remaining_balance) <= 0}
-                onClick={() =>
-                  onAsk(
-                    `Record a payment against invoice ${invoice.invoice_number} for ${invoice.clients?.name ?? "this client"}.`,
-                  )
-                }
-              >
-                <Sparkles className="size-4" /> Ask Haseel to record payment
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => onPdf(invoice)}>
-                <ArrowDownToLine className="size-4" /> PDF
-              </Button>
-            </div>
+<InvoiceDeliveryActions
+  invoice={invoice}
+  onPdf={onPdf}
+  onAsk={onAsk}
+/>
             <DetailSection title="Line items">
               {details.data.items.map((item) => (
                 <div
@@ -599,6 +591,138 @@ function InvoiceDrawer({
     </div>
   );
 }
+
+function InvoiceDeliveryActions({
+  invoice,
+  onPdf,
+  onAsk,
+}: {
+  invoice: InvoiceRow;
+  onPdf: (row: InvoiceRow) => void;
+  onAsk: (text: string) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  const [sending, setSending] = useState<
+    "email" | "whatsapp" | null
+  >(null);
+
+  const [feedback, setFeedback] = useState("");
+
+  const send = async (
+    channel: "email" | "whatsapp",
+  ) => {
+    setSending(channel);
+    setFeedback("");
+
+    try {
+      const result = await sendInvoiceFn({
+        data: {
+          invoice_id: invoice.id,
+          channel,
+        },
+      });
+
+      const response = result as {
+        error?: string;
+        message?: string;
+      };
+
+      if (response.error) {
+        setFeedback(
+          response.message ??
+            response.error ??
+            "Unable to send the invoice.",
+        );
+        return;
+      }
+
+      setFeedback(
+        channel === "whatsapp"
+          ? "Invoice sent by WhatsApp."
+          : "Invoice sent by email.",
+      );
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["invoices"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["invoice", invoice.id],
+        }),
+      ]);
+    } catch {
+      setFeedback(
+        "Unable to send the invoice.",
+      );
+    } finally {
+      setSending(null);
+    }
+  };
+
+  return (
+    <div className="mt-5 space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          disabled={sending !== null}
+          onClick={() => send("email")}
+        >
+          <Mail className="size-4" />
+          {sending === "email"
+            ? "Sending…"
+            : "Email"}
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={sending !== null}
+          onClick={() => send("whatsapp")}
+        >
+          <MessageCircle className="size-4" />
+          {sending === "whatsapp"
+            ? "Sending…"
+            : "WhatsApp"}
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={
+            Number(invoice.remaining_balance) <= 0
+          }
+          onClick={() =>
+            onAsk(
+              `Record a payment against invoice ${invoice.invoice_number} for ${
+                invoice.clients?.name ?? "this client"
+              }.`,
+            )
+          }
+        >
+          <Sparkles className="size-4" />
+          Record payment
+        </Button>
+
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => onPdf(invoice)}
+        >
+          <ArrowDownToLine className="size-4" />
+          PDF
+        </Button>
+      </div>
+
+      {feedback && (
+        <p className="text-xs text-muted-foreground">
+          {feedback}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function DetailSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mt-6">
