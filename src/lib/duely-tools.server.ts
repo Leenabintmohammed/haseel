@@ -610,494 +610,433 @@ export async function executeTool(name: string, params: Record<string, unknown>,
     }
 
 
-
 case "send_invoice": {
   const id = p["invoice_id"] as string;
 
   if (!id) {
-    return fail(
-      "validation_failed",
-      "invoice_id is required.",
-    );
+    return fail("validation_failed", "invoice_id is required.");
   }
 
-  const channel = String(
-    p["channel"] ?? "email",
-  ).toLowerCase();
-
-  if (channel === "whatsapp") {
-    return await sendWhatsAppInvoice(
-      ctx,
-      id,
-    );
-  }
-
-  if (channel !== "email") {
-    return fail(
-      "validation_failed",
-      'channel must be "email" or "whatsapp".',
-    );
-  }
-  if (!id) return fail("validation_failed", "invoice_id is required.");
-
+  // ------------------------------------------------------------
+  // 1. Load invoice + client
+  // ------------------------------------------------------------
   const { data: invoice, error: invoiceError } = await ctx.supabase
     .from("invoices")
-    .select("*")
+    .select("*, clients(name,company_name,email,phone,preferred_language)")
     .eq("id", id)
     .eq("owner_id", ctx.userId)
     .maybeSingle();
 
-  if (invoiceError) return fail("internal_error", invoiceError.message);
-  if (!invoice) return fail("not_found", "Invoice not found.");
+  if (invoiceError) {
+    return fail("internal_error", invoiceError.message);
+  }
 
-  const { data: client, error: clientError } = await ctx.supabase
-    .from("clients")
-    .select("name, email")
-    .eq("id", invoice.client_id)
-    .eq("owner_id", ctx.userId)
-    .maybeSingle();
+  if (!invoice) {
+    return fail("not_found", "Invoice not found.", {
+      invoice_id: id,
+    });
+  }
 
-  if (clientError) return fail("internal_error", clientError.message);
+  const client = invoice.clients as
+    | {
+        name?: string | null;
+        company_name?: string | null;
+        email?: string | null;
+        phone?: string | null;
+        preferred_language?: string | null;
+      }
+    | null;
 
-  const recipient = client?.email?.trim();
+  // ------------------------------------------------------------
+  // 2. Resolve delivery preferences
+  // ------------------------------------------------------------
+  const requestedChannel = String(
+    p["channel"] ?? p["delivery_channel"] ?? "email",
+  ).toLowerCase();
 
-  if (!recipient) {
+  const channel =
+    requestedChannel === "whatsapp" ||
+    requestedChannel === "both"
+      ? requestedChannel
+      : "email";
+
+  const language = String(
+    p["language"] ??
+      client?.preferred_language ??
+      "en",
+  ).toLowerCase();
+
+  const tone = String(
+    p["tone"] ?? "professional",
+  ).toLowerCase();
+
+  const intent = String(
+    p["intent"] ?? "invoice_delivery",
+  );
+
+  // The orchestrator/AI can provide the actual generated message.
+  // We intentionally do NOT call an LLM from inside this financial tool.
+  const aiMessage =
+    typeof p["message"] === "string" && p["message"].trim()
+      ? p["message"].trim()
+      : null;
+
+  // ------------------------------------------------------------
+  // 3. Validate recipient
+  // ------------------------------------------------------------
+  const email = client?.email?.trim() || null;
+  const phone = client?.phone?.trim() || null;
+
+  if (channel === "email" && !email) {
     return fail(
       "validation_failed",
-      `Client ${client?.name ?? "for this invoice"} does not have an email address.`,
+      "The client does not have an email address.",
+      {
+        invoice_id: id,
+        client_id: invoice.client_id,
+      },
     );
   }
 
-  const { data: items, error: itemsError } = await ctx.supabase
-    .from("invoice_items")
-    .select("description, quantity, unit_price, line_total")
-    .eq("invoice_id", id)
-    .eq("owner_id", ctx.userId)
-    .order("sort_order", { ascending: true });
+  if (channel === "whatsapp" && !phone) {
+    return fail(
+      "validation_failed",
+      "The client does not have a phone number for WhatsApp.",
+      {
+        invoice_id: id,
+        client_id: invoice.client_id,
+      },
+    );
+  }
 
-  if (itemsError) return fail("internal_error", itemsError.message);
+  if (channel === "both" && !email && !phone) {
+    return fail(
+      "validation_failed",
+      "The client does not have an email address or phone number.",
+      {
+        invoice_id: id,
+        client_id: invoice.client_id,
+      },
+    );
+  }
 
-  const { data: profile, error: profileError } = await ctx.supabase
-    .from("profiles")
-    .select("company_name, address")
-    .eq("id", ctx.userId)
-    .maybeSingle();
-
-  if (profileError) return fail("internal_error", profileError.message);
+  // ------------------------------------------------------------
+  // 4. Generate PDF
+  // ------------------------------------------------------------
+  const items = Array.isArray(invoice.items)
+    ? invoice.items
+    : [];
 
   const pdfBytes = await generateInvoicePDF({
     invoice_number: invoice.invoice_number,
-    issue_date: invoice.issue_date?.slice(0, 10) ?? today(),
-    due_date: invoice.due_date?.slice(0, 10) ?? today(),
-    client_name: client?.name ?? "Client",
-    client_email: recipient,
-    company_name: profile?.company_name ?? "Your Company",
-    company_address: profile?.address ?? undefined,
+    issue_date: invoice.issue_date
+      ? String(invoice.issue_date).slice(0, 10)
+      : today(),
+    due_date: invoice.due_date
+      ? String(invoice.due_date).slice(0, 10)
+      : today(),
+
+    client_name:
+      client?.company_name ||
+      client?.name ||
+      "Client",
+
+    client_email: email ?? undefined,
+
     currency: invoice.currency ?? "AED",
-    amount: num(invoice.amount),
+
     subtotal: num(invoice.subtotal),
-    discount: num(invoice.discount),
-    tax: num(invoice.tax),
-    paid_amount: num(invoice.paid_amount),
-    items: (items ?? []).map((item) => ({
-      description: item.description,
+    discount_amount: num(invoice.discount_amount),
+    tax_amount: num(invoice.tax_amount),
+    total: num(invoice.amount),
+
+    items: items.map((item: any) => ({
+      description: String(item.description ?? ""),
       quantity: num(item.quantity, 1),
       unit_price: num(item.unit_price),
-      line_total: num(item.line_total),
+      line_total: num(
+        item.line_total ??
+          num(item.quantity, 1) * num(item.unit_price),
+      ),
     })),
+
     notes: invoice.notes ?? undefined,
   });
 
-  const apiKey = process.env["RESEND_API_KEY"];
+  // ------------------------------------------------------------
+  // 5. Build fallback message
+  // ------------------------------------------------------------
+  const clientName =
+    client?.name ||
+    client?.company_name ||
+    "there";
 
-  if (!apiKey) {
-    return fail(
-      "internal_error",
-      "Email service is not configured. RESEND_API_KEY is missing.",
-    );
+  const invoiceNumber =
+    invoice.invoice_number ?? "invoice";
+
+  const amount =
+    `${invoice.currency ?? "AED"} ${num(invoice.amount).toFixed(2)}`;
+
+  const dueDate =
+    invoice.due_date
+      ? String(invoice.due_date).slice(0, 10)
+      : "";
+
+  let fallbackMessage: string;
+
+  if (language.startsWith("ar")) {
+    fallbackMessage =
+      tone === "friendly"
+        ? `مرحبًا ${clientName}،\n\nأرفق لك فاتورة ${invoiceNumber} بقيمة ${amount}. تاريخ الاستحقاق ${dueDate}.\n\nشكرًا لك.`
+        : `مرحبًا ${clientName}،\n\nيرجى العثور على الفاتورة ${invoiceNumber} بقيمة ${amount} مرفقة. تاريخ الاستحقاق ${dueDate}.\n\nمع الشكر.`;
+  } else {
+    fallbackMessage =
+      tone === "friendly"
+        ? `Hi ${clientName},\n\nPlease find invoice ${invoiceNumber} for ${amount}. The payment due date is ${dueDate}.\n\nThank you!`
+        : `Dear ${clientName},\n\nPlease find invoice ${invoiceNumber} for ${amount} attached. The payment due date is ${dueDate}.\n\nKind regards.`;
   }
 
-  const pdfBase64 = Buffer.from(pdfBytes).toString("base64");
+  const message = aiMessage || fallbackMessage;
 
-  const emailResponse = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "Haseel <billing@gohaseel.com>",
-      to: [recipient],
-subject: `Invoice ${invoice.invoice_number} from ${profile?.company_name ?? "Your Company"}`,      html: `
-    <div style="
-        width: 100%;
-        padding: 40px 16px;
-        box-sizing: border-box;
-      ">
+  // ------------------------------------------------------------
+  // 6. Email delivery
+  // ------------------------------------------------------------
+  let emailResult:
+    | {
+        attempted: boolean;
+        sent: boolean;
+        message?: string;
+        id?: string;
+      }
+    | null = null;
 
-        <table
-          role="presentation"
-          width="100%"
-          cellpadding="0"
-          cellspacing="0"
-          border="0"
-          style="
-            max-width: 620px;
-            margin: 0 auto;
-            background: #ffffff;
-            border-radius: 16px;
-            overflow: hidden;
-            border: 1px solid #e5e9e7;
-          "
-        >
+  if ((channel === "email" || channel === "both") && email) {
+    const apiKey = process.env.RESEND_API_KEY;
 
-          <!-- Header -->
-          <tr>
-            <td style="
-              padding: 28px 32px;
-              background: #ffffff;
-              border-bottom: 1px solid #edf0ee;
-            ">
+    if (!apiKey) {
+      return fail(
+        "internal_error",
+        "RESEND_API_KEY is not configured.",
+      );
+    }
 
-              <table
-                role="presentation"
-                width="100%"
-                cellpadding="0"
-                cellspacing="0"
-                border="0"
-              >
-                <tr>
-                  <td>
-                    <div style="
-                      font-size: 22px;
-                      font-weight: 700;
-                      letter-spacing: -0.5px;
-                      color: #17201c;
-                    ">
-                      ${profile?.company_name ?? "Your Company"}
-                    </div>
+    const pdfBase64 =
+      Buffer.from(pdfBytes).toString("base64");
 
-                    <div style="
-                      margin-top: 4px;
-                      font-size: 13px;
-                      color: #7a8580;
-                    ">
-                      Invoice
-                    </div>
-                  </td>
-
-                  <td align="right">
-                    <div style="
-                      display: inline-block;
-                      padding: 7px 12px;
-                      background: #eef8f2;
-                      color: #16734a;
-                      border-radius: 999px;
-                      font-size: 12px;
-                      font-weight: 600;
-                    ">
-                      PAYMENT DUE
-                    </div>
-                  </td>
-                </tr>
-              </table>
-
-            </td>
-          </tr>
-
-          <!-- Main content -->
-          <tr>
-            <td style="padding: 36px 32px 32px;">
-
-              <div style="
-                font-size: 14px;
-                color: #7a8580;
-                margin-bottom: 8px;
-              ">
-                Invoice ${invoice.invoice_number}
-              </div>
-
-              <div style="
-                font-size: 30px;
-                line-height: 1.2;
-                font-weight: 700;
-                letter-spacing: -0.8px;
-                color: #17201c;
-                margin-bottom: 24px;
-              ">
-                ${new Intl.NumberFormat("en-AE", {
-                  style: "currency",
-                  currency: invoice.currency ?? "AED",
-                  minimumFractionDigits: 2,
-                }).format(num(invoice.amount))}
-              </div>
-
-              <p style="
-                margin: 0 0 24px;
-                font-size: 15px;
-                line-height: 1.7;
-                color: #46514c;
-              ">
-                Hello ${client?.name ?? "there"},
-              </p>
-
-              <p style="
-                margin: 0 0 28px;
-                font-size: 15px;
-                line-height: 1.7;
-                color: #46514c;
-              ">
-                Please find your invoice attached to this email.
-                We kindly ask you to review the invoice and arrange payment
-                by the due date.
-              </p>
-
-              <!-- Invoice summary -->
-              <table
-                role="presentation"
-                width="100%"
-                cellpadding="0"
-                cellspacing="0"
-                border="0"
-                style="
-                  background: #f8faf9;
-                  border: 1px solid #e6ebe8;
-                  border-radius: 12px;
-                  overflow: hidden;
-                  margin-bottom: 28px;
-                "
-              >
-
-                <tr>
-                  <td style="
-                    padding: 16px 18px;
-                    font-size: 13px;
-                    color: #7a8580;
-                    border-bottom: 1px solid #e6ebe8;
-                  ">
-                    Invoice number
-                  </td>
-
-                  <td align="right" style="
-                    padding: 16px 18px;
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: #17201c;
-                    border-bottom: 1px solid #e6ebe8;
-                  ">
-                    ${invoice.invoice_number}
-                  </td>
-                </tr>
-
-                <tr>
-                  <td style="
-                    padding: 16px 18px;
-                    font-size: 13px;
-                    color: #7a8580;
-                    border-bottom: 1px solid #e6ebe8;
-                  ">
-                    Issue date
-                  </td>
-
-                  <td align="right" style="
-                    padding: 16px 18px;
-                    font-size: 14px;
-                    color: #17201c;
-                    border-bottom: 1px solid #e6ebe8;
-                  ">
-                    ${invoice.issue_date?.slice(0, 10) ?? "—"}
-                  </td>
-                </tr>
-
-                <tr>
-                  <td style="
-                    padding: 16px 18px;
-                    font-size: 13px;
-                    color: #7a8580;
-                    border-bottom: 1px solid #e6ebe8;
-                  ">
-                    Due date
-                  </td>
-
-                  <td align="right" style="
-                    padding: 16px 18px;
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: #16734a;
-                    border-bottom: 1px solid #e6ebe8;
-                  ">
-                    ${invoice.due_date?.slice(0, 10) ?? "—"}
-                  </td>
-                </tr>
-
-                <tr>
-                  <td style="
-                    padding: 16px 18px;
-                    font-size: 13px;
-                    color: #7a8580;
-                  ">
-                    Amount due
-                  </td>
-
-                  <td align="right" style="
-                    padding: 16px 18px;
-                    font-size: 16px;
-                    font-weight: 700;
-                    color: #17201c;
-                  ">
-                    ${new Intl.NumberFormat("en-AE", {
-                      style: "currency",
-                      currency: invoice.currency ?? "AED",
-                      minimumFractionDigits: 2,
-                    }).format(num(invoice.amount))}
-                  </td>
-                </tr>
-
-              </table>
-
-              <!-- Attachment notice -->
-              <table
-                role="presentation"
-                width="100%"
-                cellpadding="0"
-                cellspacing="0"
-                border="0"
-                style="
-                  margin-bottom: 28px;
-                "
-              >
-                <tr>
-                  <td style="
-                    padding: 16px 18px;
-                    background: #f3f7f5;
-                    border-left: 4px solid #16734a;
-                    border-radius: 6px;
-                  ">
-
-                    <div style="
-                      font-size: 14px;
-                      font-weight: 600;
-                      color: #17201c;
-                      margin-bottom: 4px;
-                    ">
-                      Invoice attached
-                    </div>
-
-                    <div style="
-                      font-size: 13px;
-                      line-height: 1.6;
-                      color: #66716c;
-                    ">
-                      Your invoice is attached to this email as a PDF.
-                    </div>
-
-                  </td>
-                </tr>
-              </table>
-
-              <p style="
-                margin: 0 0 24px;
-                font-size: 14px;
-                line-height: 1.7;
-                color: #66716c;
-              ">
-                If you have any questions regarding this invoice,
-                please contact the sender directly.
-              </p>
-
-              <p style="
-                margin: 0;
-                font-size: 15px;
-                line-height: 1.7;
-                color: #46514c;
-              ">
-                Thank you for your business.
-              </p>
-
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="
-              padding: 24px 32px;
-              background: #fafcfb;
-              border-top: 1px solid #edf0ee;
-            ">
-
-              <div style="
-                font-size: 13px;
-                font-weight: 600;
-                color: #17201c;
-                margin-bottom: 5px;
-              ">
-                Sent with Haseel
-              </div>
-
-              <div style="
-                font-size: 12px;
-                line-height: 1.6;
-                color: #89928e;
-              ">
-                Smart business operations, powered by AI.
-              </div>
-
-              <div style="
-                margin-top: 12px;
-                font-size: 12px;
-                color: #a0a8a4;
-              ">
-                This is an automated email. Please do not reply directly
-                to this message.
-              </div>
-
-            </td>
-          </tr>
-
-        </table>
-
-      </div>
-      `,
-      attachments: [
-        {
-          filename: `invoice-${invoice.invoice_number}.pdf`,
-          content: pdfBase64,
+    const emailResponse = await fetch(
+      "https://api.resend.com/emails",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
         },
-      ],
-    }),
+        body: JSON.stringify({
+          from: "Duely <billing@yalladuely.com>",
+          to: [email],
+          subject: `Invoice ${invoice.invoice_number} from ${"Duely"}`,
+          html: message
+            .split("\n")
+            .map((line) =>
+              line.trim()
+                ? `<p>${line}</p>`
+                : "<br />",
+            )
+            .join(""),
+          attachments: [
+            {
+              filename: `invoice-${invoice.invoice_number}.pdf`,
+              content: pdfBase64,
+            },
+          ],
+        }),
+      },
+    );
+
+    const emailBody = await emailResponse.json().catch(() => null);
+
+    if (!emailResponse.ok) {
+      emailResult = {
+        attempted: true,
+        sent: false,
+        message:
+          emailBody?.message ??
+          "Invoice email could not be sent.",
+      };
+    } else {
+      emailResult = {
+        attempted: true,
+        sent: true,
+        id: emailBody?.id,
+      };
+    }
+  }
+
+  // ------------------------------------------------------------
+  // 7. WhatsApp delivery
+  // ------------------------------------------------------------
+  //
+  // IMPORTANT:
+  // The current repository does not contain an existing WhatsApp
+  // provider implementation. We therefore keep this branch
+  // provider-safe instead of pretending that WhatsApp was sent.
+  //
+  // Once Meta WhatsApp Cloud API credentials are configured,
+  // this branch can be connected without changing the invoice
+  // or approval architecture.
+  // ------------------------------------------------------------
+  let whatsappResult:
+    | {
+        attempted: boolean;
+        sent: boolean;
+        message?: string;
+        phone?: string;
+      }
+    | null = null;
+
+  if ((channel === "whatsapp" || channel === "both") && phone) {
+    const whatsappToken =
+      process.env.WHATSAPP_ACCESS_TOKEN;
+
+    const whatsappPhoneNumberId =
+      process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+    if (!whatsappToken || !whatsappPhoneNumberId) {
+      whatsappResult = {
+        attempted: false,
+        sent: false,
+        phone,
+        message:
+          "WhatsApp is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID.",
+      };
+    } else {
+      const graphVersion =
+        process.env.WHATSAPP_GRAPH_VERSION ?? "v23.0";
+
+      const whatsappResponse = await fetch(
+        `https://graph.facebook.com/${graphVersion}/${whatsappPhoneNumberId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${whatsappToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: phone.replace(/[^\d]/g, ""),
+            type: "text",
+            text: {
+              preview_url: false,
+              body: message,
+            },
+          }),
+        },
+      );
+
+      const whatsappBody =
+        await whatsappResponse.json().catch(() => null);
+
+      if (!whatsappResponse.ok) {
+        whatsappResult = {
+          attempted: true,
+          sent: false,
+          phone,
+          message:
+            whatsappBody?.error?.message ??
+            "WhatsApp message could not be sent.",
+        };
+      } else {
+        whatsappResult = {
+          attempted: true,
+          sent: true,
+          phone,
+        };
+      }
+    }
+  }
+
+  // ------------------------------------------------------------
+  // 8. Determine final delivery state
+  // ------------------------------------------------------------
+  const emailSent = emailResult?.sent === true;
+  const whatsappSent = whatsappResult?.sent === true;
+
+  const requestedEmail =
+    channel === "email" || channel === "both";
+
+  const requestedWhatsApp =
+    channel === "whatsapp" || channel === "both";
+
+  const successful =
+    (!requestedEmail || emailSent) &&
+    (!requestedWhatsApp || whatsappSent);
+
+  // ------------------------------------------------------------
+  // 9. Audit
+  // ------------------------------------------------------------
+  await audit(ctx, {
+    entity_type: "invoice",
+    entity_id: id,
+    action: successful
+      ? "invoice.sent"
+      : "invoice.send_attempted",
+    after_state: {
+      channel,
+      intent,
+      tone,
+      language,
+      email: emailResult,
+      whatsapp: whatsappResult,
+      message_generated: Boolean(aiMessage),
+    },
   });
 
-  const emailResult = (await emailResponse.json()) as {
-    id?: string;
-    message?: string;
-  };
-
-  if (!emailResponse.ok || !emailResult.id) {
-    console.error("Resend invoice email failed", {
-      status: emailResponse.status,
-      message: emailResult.message,
-    });
-
+  // ------------------------------------------------------------
+  // 10. Return structured result
+  // ------------------------------------------------------------
+  if (!successful) {
     return fail(
       "internal_error",
-      emailResult.message ?? "Invoice email could not be sent.",
+      "Invoice delivery was not completed on all requested channels.",
+      {
+        invoice_id: id,
+        invoice_number: invoice.invoice_number,
+        channel,
+        email: emailResult,
+        whatsapp: whatsappResult,
+      },
     );
-  }
-
-  const moved = await setInvoiceStatus(ctx, id, "sent");
-
-  if (isFailure(moved)) {
-    return moved;
   }
 
   return {
     sent: true,
-    simulated: false,
-    email_id: emailResult.id,
-    recipient,
-    invoice: moved.invoice,
+    invoice_id: id,
+    invoice_number: invoice.invoice_number,
+
+    channel,
+
+    intent,
+    tone,
+    language,
+
+    message,
+    message_generated_by_ai: Boolean(aiMessage),
+
+    pdf: {
+      generated: true,
+      filename: `invoice-${invoice.invoice_number}.pdf`,
+    },
+
+    email: emailResult,
+    whatsapp: whatsappResult,
+
+    approval: {
+      required: true,
+      handled_by: "ai_actions",
+    },
   };
 }
+
     case "send_reminder": {
       const id = p['reminder_id'] as string;
       const { data, error } = await ctx.supabase
