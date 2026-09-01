@@ -989,7 +989,7 @@ case "send_invoice": {
         .json()
         .catch(() => null);
 
-    if (!emailResponse.ok) {
+     if (!emailResponse.ok) {
       emailResult = {
         attempted: true,
         sent: false,
@@ -1004,21 +1004,22 @@ case "send_invoice": {
         id: emailBody?.id,
       };
     }
+  }
 
-    if (channel === "email" && !emailResult?.sent) {
-  return fail(
-    "internal_error",
-    emailResult?.message ??
-      "Invoice email could not be sent.",
-    {
-      invoice_id: id,
-      invoice_number: invoiceNumber,
-      channel,
-      email: emailResult,
-    },
-  );
-}
-  
+  // Email was requested but was not actually sent.
+  if (channel === "email" && !emailResult?.sent) {
+    return fail(
+      "internal_error",
+      emailResult?.message ??
+        "Invoice email could not be sent.",
+      {
+        invoice_id: id,
+        invoice_number: invoiceNumber,
+        channel,
+        email: emailResult,
+      },
+    );
+  }
 
   // ------------------------------------------------------------
   // 8. WhatsApp delivery
