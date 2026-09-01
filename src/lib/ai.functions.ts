@@ -714,7 +714,15 @@ const resultRecord =
   typeof result === "object"
     ? (result as Record<string, unknown>)
     : null;
-
+console.log("[Haseel Execution Result Debug]", {
+  tool_name: action.tool_name,
+  result,
+  result_type: typeof result,
+  sent: resultRecord?.sent,
+  sent_type: typeof resultRecord?.sent,
+  success: resultRecord?.success,
+  error: resultRecord?.error,
+});
 const isError =
   action.tool_name === "send_invoice"
     ? resultRecord?.sent !== true
