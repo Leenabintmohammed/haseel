@@ -957,7 +957,7 @@ case "send_invoice": {
         },
         body: JSON.stringify({
           from:
-            "Duely <billing@yalladuely.com>",
+            "Haseel <billing@gohaseel.com>",
 
           to: [email],
 
