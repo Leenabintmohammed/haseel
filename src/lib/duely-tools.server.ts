@@ -1004,6 +1004,20 @@ case "send_invoice": {
         id: emailBody?.id,
       };
     }
+
+    if (channel === "email" && !emailResult?.sent) {
+  return fail(
+    "internal_error",
+    emailResult?.message ??
+      "Invoice email could not be sent.",
+    {
+      invoice_id: id,
+      invoice_number: invoiceNumber,
+      channel,
+      email: emailResult,
+    },
+  );
+}
   }
 
   // ------------------------------------------------------------
