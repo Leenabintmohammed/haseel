@@ -1022,93 +1022,40 @@ case "send_invoice": {
   }
 
   // ------------------------------------------------------------
-  // 8. WhatsApp delivery
-  // ------------------------------------------------------------
-  let whatsappResult:
-    | {
-        attempted: boolean;
-        sent: boolean;
-        message?: string;
-        phone?: string;
-      }
-    | null = null;
-
-  if (channel === "whatsapp" && phone) {
-    const whatsappToken =
-      process.env.WHATSAPP_ACCESS_TOKEN;
-
-    const whatsappPhoneNumberId =
-      process.env.WHATSAPP_PHONE_NUMBER_ID;
-
-    if (
-      !whatsappToken ||
-      !whatsappPhoneNumberId
-    ) {
-      whatsappResult = {
-        attempted: false,
-        sent: false,
-        phone,
-        message:
-          "WhatsApp is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID.",
-      };
-    } else {
-      const graphVersion =
-        process.env.WHATSAPP_GRAPH_VERSION ??
-        "v23.0";
-
-      const normalizedPhone =
-        phone.replace(/[^\d]/g, "");
-
-      const whatsappResponse =
-        await fetch(
-          `https://graph.facebook.com/${graphVersion}/${whatsappPhoneNumberId}/messages`,
-          {
-            method: "POST",
-            headers: {
-              Authorization:
-                `Bearer ${whatsappToken}`,
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify({
-              messaging_product:
-                "whatsapp",
-
-              to: normalizedPhone,
-
-              type: "text",
-
-              text: {
-                preview_url: false,
-                body: message,
-              },
-            }),
-          },
-        );
-
-      const whatsappBody =
-        await whatsappResponse
-          .json()
-          .catch(() => null);
-
-      if (!whatsappResponse.ok) {
-        whatsappResult = {
-          attempted: true,
-          sent: false,
-          phone,
-          message:
-            whatsappBody?.error?.message ??
-            "WhatsApp message could not be sent.",
-        };
-      } else {
-        whatsappResult = {
-          attempted: true,
-          sent: true,
-          phone,
-        };
-      }
+// 8. WhatsApp delivery
+// ------------------------------------------------------------
+let whatsappResult:
+  | {
+      attempted: boolean;
+      sent: boolean;
+      message?: string;
+      phone?: string;
+      whatsapp_message_id?: string | null;
     }
-  }
+  | null = null;
+
+if (channel === "whatsapp") {
+  const whatsappDelivery =
+    await sendWhatsAppInvoice(
+      {
+        supabase: ctx.supabase,
+        userId: ctx.userId,
+      },
+      id,
+      message,
+    );
+
+  whatsappResult = {
+    attempted: true,
+    sent: whatsappDelivery.sent,
+    phone:
+      whatsappDelivery.recipient || phone || undefined,
+    message:
+      whatsappDelivery.message,
+    whatsapp_message_id:
+      whatsappDelivery.whatsapp_message_id,
+  };
+}
 
   // ------------------------------------------------------------
   // 9. Determine final result
