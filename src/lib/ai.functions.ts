@@ -49,6 +49,28 @@ function approvalSignatureSecret() {
   return secret;
 }
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+
+  if (value !== null && typeof value === "object") {
+    const object = value as Record<string, unknown>;
+
+    return Object.keys(object)
+      .sort()
+      .reduce(
+        (result, key) => {
+          result[key] = canonicalize(object[key]);
+          return result;
+        },
+        {} as Record<string, unknown>,
+      );
+  }
+
+  return value;
+}
+
 function approvalSignaturePayload(input: ApprovalSignatureInput) {
   const canonicalExpiresAt = input.expires_at
     ? new Date(input.expires_at).toISOString()
@@ -59,7 +81,7 @@ function approvalSignaturePayload(input: ApprovalSignatureInput) {
     input.intent,
     input.tool_name,
     input.autonomy_level,
-    input.parameters,
+    canonicalize(input.parameters),
     input.entity_type,
     input.entity_id,
     input.state_hash,
