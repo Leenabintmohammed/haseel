@@ -633,82 +633,87 @@ export const resolveAction = createServerFn({ method: "POST" })
       };
     }
 
-    const result = await executeTool(
-      action.tool_name,
-      (action.parameters ?? {}) as Record<string, unknown>,
-      {
-        supabase: context.supabase,
-        userId: context.userId,
-        actor: "human",
-      },
-    );
+const result = await executeTool(
+  action.tool_name,
+  (action.parameters ?? {}) as Record<string, unknown>,
+  {
+    supabase: context.supabase,
+    userId: context.userId,
+    actor: "human",
+  },
+);
 
-    const isError =
-      (result as { error?: string })?.error !== undefined;
+const resultRecord =
+  result &&
+  typeof result === "object"
+    ? (result as Record<string, unknown>)
+    : null;
 
-    const finalStatus = isError ? "failed" : "completed";
+const isError =
+  resultRecord?.error !== undefined ||
+  resultRecord?.sent === false ||
+  resultRecord?.success === false;
 
-    await context.supabase
-      .from("ai_actions")
-      .update({
+const finalStatus =
+  isError ? "failed" : "completed";
+
+await context.supabase
+  .from("ai_actions")
+  .update({
+    status: finalStatus,
+
+    server_signature:
+      createApprovalSignature({
+        owner_id: action.owner_id,
+        intent: action.intent,
+        tool_name: action.tool_name,
+        autonomy_level: action.autonomy_level,
+        parameters: action.parameters,
+        entity_type: action.entity_type,
+        entity_id: action.entity_id,
+        state_hash: action.state_hash,
+        expires_at: action.expires_at,
         status: finalStatus,
-        server_signature: createApprovalSignature({
-          owner_id: action.owner_id,
-          intent: action.intent,
-          tool_name: action.tool_name,
-          autonomy_level: action.autonomy_level,
-          parameters: action.parameters,
-          entity_type: action.entity_type,
-          entity_id: action.entity_id,
-          state_hash: action.state_hash,
-          expires_at: action.expires_at,
-          status: finalStatus,
-        }) as never,
+      }) as never,
 
-        // Keep the complete raw result internally for audit/debugging.
-        result: result as never,
-        new_state: result as never,
+    result: result as never,
+    new_state: result as never,
+    origin: "human_approved",
+    resolved_at: new Date().toISOString(),
 
-        origin: "human_approved",
-        resolved_at: new Date().toISOString(),
+    error: isError
+      ? JSON.stringify(result)
+      : null,
+  })
+  .eq("id", action.id);
 
-        error: isError ? JSON.stringify(result) : null,
-      })
-      .eq("id", action.id);
+await audit(
+  {
+    supabase: context.supabase,
+    userId: context.userId,
+    actor: "human",
+  },
+  {
+    entity_type: "ai_action",
+    entity_id: action.id,
+    action: `ai_action.${finalStatus}`,
+    after_state: {
+      status: finalStatus,
+      tool: action.tool_name,
+    },
+    metadata: isError
+      ? { error: result }
+      : { success: true },
+  },
+);
 
-    await audit(
-      {
-        supabase: context.supabase,
-        userId: context.userId,
-        actor: "human",
-      },
-      {
-        entity_type: "ai_action",
-        entity_id: action.id,
-        action: `ai_action.${finalStatus}`,
-        after_state: {
-          status: finalStatus,
-          tool: action.tool_name,
-        },
-        metadata: isError
-          ? { error: result }
-          : { success: true },
-      },
-    );
+return {
+  status:
+    finalStatus as ("completed" | "failed"),
 
-    if (isError) {
-      const errorResult = result as {
-        error?: string;
-        message?: string;
-      };
-
-      return {
-        status: "failed" as const,
-        message:
-          errorResult.message ??
-          errorResult.error ??
-          "The action could not be completed.",
-      };
+  message:
+    JSON.stringify(result),
+};
     }
 
     return {
