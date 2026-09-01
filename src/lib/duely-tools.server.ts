@@ -648,16 +648,15 @@ case "send_invoice": {
     | null;
 
   // ------------------------------------------------------------
-  // 2. Resolve delivery preferences
+  // 2. Resolve delivery parameters
   // ------------------------------------------------------------
   const requestedChannel = String(
-    p["channel"] ?? p["delivery_channel"] ?? "email",
+    p["channel"] ?? "email",
   ).toLowerCase();
 
   const channel =
-    requestedChannel === "whatsapp" ||
-    requestedChannel === "both"
-      ? requestedChannel
+    requestedChannel === "whatsapp"
+      ? "whatsapp"
       : "email";
 
   const language = String(
@@ -671,18 +670,17 @@ case "send_invoice": {
   ).toLowerCase();
 
   const intent = String(
-    p["intent"] ?? "invoice_delivery",
+    p["intent"] ?? "send_invoice",
   );
 
-  // The orchestrator/AI can provide the actual generated message.
-  // We intentionally do NOT call an LLM from inside this financial tool.
   const aiMessage =
-    typeof p["message"] === "string" && p["message"].trim()
+    typeof p["message"] === "string" &&
+    p["message"].trim()
       ? p["message"].trim()
       : null;
 
   // ------------------------------------------------------------
-  // 3. Validate recipient
+  // 3. Resolve client contact
   // ------------------------------------------------------------
   const email = client?.email?.trim() || null;
   const phone = client?.phone?.trim() || null;
@@ -709,62 +707,116 @@ case "send_invoice": {
     );
   }
 
-  if (channel === "both" && !email && !phone) {
-    return fail(
-      "validation_failed",
-      "The client does not have an email address or phone number.",
-      {
-        invoice_id: id,
-        client_id: invoice.client_id,
-      },
-    );
-  }
+  // ------------------------------------------------------------
+  // 4. Determine invoice dates and overdue state
+  // ------------------------------------------------------------
+  const dueDate = invoice.due_date
+    ? String(invoice.due_date).slice(0, 10)
+    : null;
+
+  const issueDate = invoice.issue_date
+    ? String(invoice.issue_date).slice(0, 10)
+    : today();
+
+  const todayDate = today();
+
+  const outstandingAmount = num(
+    invoice.remaining_balance ??
+      invoice.amount ??
+      0,
+  );
+
+  const isOverdue =
+    Boolean(dueDate) &&
+    dueDate < todayDate &&
+    outstandingAmount > 0;
 
   // ------------------------------------------------------------
-  // 4. Generate PDF
+  // 5. Generate invoice PDF
   // ------------------------------------------------------------
-  const items = Array.isArray(invoice.items)
+  const invoiceItems = Array.isArray(invoice.items)
     ? invoice.items
     : [];
 
+  // Some older invoice rows may not contain company metadata.
+  // Fall back safely to Duely.
+  const { data: profile } = await ctx.supabase
+    .from("profiles")
+    .select("company_name,address")
+    .eq("id", ctx.userId)
+    .maybeSingle();
+
+  const companyName =
+    profile?.company_name?.trim() ||
+    "Duely";
+
+  const companyAddress =
+    profile?.address?.trim() ||
+    undefined;
+
   const pdfBytes = await generateInvoicePDF({
-    invoice_number: invoice.invoice_number,
-    issue_date: invoice.issue_date
-      ? String(invoice.issue_date).slice(0, 10)
-      : today(),
-    due_date: invoice.due_date
-      ? String(invoice.due_date).slice(0, 10)
-      : today(),
+    invoice_number: String(invoice.invoice_number),
+    issue_date: issueDate,
+    due_date: dueDate ?? issueDate,
 
     client_name:
-      client?.company_name ||
       client?.name ||
+      client?.company_name ||
       "Client",
 
-    client_email: email ?? undefined,
+    client_email:
+      email ?? undefined,
 
-    currency: invoice.currency ?? "AED",
+    company_name: companyName,
+    company_address: companyAddress,
 
+    currency:
+      String(invoice.currency ?? "AED"),
+
+    amount: num(invoice.amount),
     subtotal: num(invoice.subtotal),
-    discount_amount: num(invoice.discount_amount),
-    tax_amount: num(invoice.tax_amount),
-    total: num(invoice.amount),
 
-    items: items.map((item: any) => ({
-      description: String(item.description ?? ""),
-      quantity: num(item.quantity, 1),
-      unit_price: num(item.unit_price),
+    discount: num(
+      invoice.discount_amount ??
+        invoice.discount ??
+        0,
+    ),
+
+    tax: num(
+      invoice.tax_amount ??
+        invoice.tax ??
+        0,
+    ),
+
+    paid_amount: num(
+      invoice.paid_amount ?? 0,
+    ),
+
+    items: invoiceItems.map((item: any) => ({
+      description: String(
+        item.description ?? "",
+      ),
+      quantity: num(
+        item.quantity,
+        1,
+      ),
+      unit_price: num(
+        item.unit_price,
+      ),
       line_total: num(
         item.line_total ??
-          num(item.quantity, 1) * num(item.unit_price),
+          num(item.quantity, 1) *
+            num(item.unit_price),
       ),
     })),
 
-    notes: invoice.notes ?? undefined,
+    notes:
+      invoice.notes ??
+      undefined,
   });
 
   // ------------------------------------------------------------
-  // 5. Build fallback message
+  // 6. Build fallback message
   // ------------------------------------------------------------
   const clientName =
     client?.name ||
@@ -772,34 +824,101 @@ case "send_invoice": {
     "there";
 
   const invoiceNumber =
-    invoice.invoice_number ?? "invoice";
+    String(invoice.invoice_number);
+
+  const currency =
+    String(invoice.currency ?? "AED");
 
   const amount =
-    `${invoice.currency ?? "AED"} ${num(invoice.amount).toFixed(2)}`;
+    `${currency} ${num(invoice.amount).toFixed(2)}`;
 
-  const dueDate =
-    invoice.due_date
-      ? String(invoice.due_date).slice(0, 10)
-      : "";
-
-  let fallbackMessage: string;
+  let fallbackMessage = "";
 
   if (language.startsWith("ar")) {
-    fallbackMessage =
-      tone === "friendly"
-        ? `مرحبًا ${clientName}،\n\nأرفق لك فاتورة ${invoiceNumber} بقيمة ${amount}. تاريخ الاستحقاق ${dueDate}.\n\nشكرًا لك.`
-        : `مرحبًا ${clientName}،\n\nيرجى العثور على الفاتورة ${invoiceNumber} بقيمة ${amount} مرفقة. تاريخ الاستحقاق ${dueDate}.\n\nمع الشكر.`;
+    if (isOverdue) {
+      if (tone === "friendly") {
+        fallbackMessage =
+          `مرحبًا ${clientName}،\n\n` +
+          `نرسل لك الفاتورة ${invoiceNumber} ` +
+          `بقيمة ${amount} مرفقة. ` +
+          `نود تذكيرك بأن تاريخ الاستحقاق كان ${dueDate} ` +
+          `ولا يزال هناك رصيد مستحق.\n\n` +
+          `يرجى مراجعة الفاتورة وترتيب السداد في أقرب وقت ممكن. ` +
+          `شكرًا لك.`;
+      } else {
+        fallbackMessage =
+          `مرحبًا ${clientName}،\n\n` +
+          `يرجى العثور على الفاتورة ${invoiceNumber} ` +
+          `بقيمة ${amount} مرفقة. ` +
+          `نود التذكير بأن تاريخ الاستحقاق كان ${dueDate} ` +
+          `وأن الرصيد لا يزال مستحقًا.\n\n` +
+          `يرجى ترتيب السداد في أقرب وقت ممكن.\n\n` +
+          `مع الشكر.`;
+      }
+    } else {
+      if (tone === "friendly") {
+        fallbackMessage =
+          `مرحبًا ${clientName}،\n\n` +
+          `أرفق لك الفاتورة ${invoiceNumber} ` +
+          `بقيمة ${amount}. ` +
+          `تاريخ الاستحقاق ${dueDate}.\n\n` +
+          `شكرًا لك.`;
+      } else {
+        fallbackMessage =
+          `مرحبًا ${clientName}،\n\n` +
+          `يرجى العثور على الفاتورة ${invoiceNumber} ` +
+          `بقيمة ${amount} مرفقة. ` +
+          `تاريخ الاستحقاق ${dueDate}.\n\n` +
+          `يرجى ترتيب السداد بحلول تاريخ الاستحقاق.\n\n` +
+          `مع الشكر.`;
+      }
+    }
   } else {
-    fallbackMessage =
-      tone === "friendly"
-        ? `Hi ${clientName},\n\nPlease find invoice ${invoiceNumber} for ${amount}. The payment due date is ${dueDate}.\n\nThank you!`
-        : `Dear ${clientName},\n\nPlease find invoice ${invoiceNumber} for ${amount} attached. The payment due date is ${dueDate}.\n\nKind regards.`;
+    if (isOverdue) {
+      if (tone === "friendly") {
+        fallbackMessage =
+          `Hi ${clientName},\n\n` +
+          `Please find invoice ${invoiceNumber} ` +
+          `for ${amount} attached. ` +
+          `The invoice was due on ${dueDate} ` +
+          `and there is still an outstanding balance.\n\n` +
+          `Please review the invoice and arrange payment ` +
+          `at your earliest convenience. Thank you.`;
+      } else {
+        fallbackMessage =
+          `Dear ${clientName},\n\n` +
+          `Please find invoice ${invoiceNumber} ` +
+          `for ${amount} attached. ` +
+          `The payment due date was ${dueDate}, ` +
+          `and the balance remains outstanding.\n\n` +
+          `Please arrange payment at your earliest convenience.\n\n` +
+          `Kind regards.`;
+      }
+    } else {
+      if (tone === "friendly") {
+        fallbackMessage =
+          `Hi ${clientName},\n\n` +
+          `Please find invoice ${invoiceNumber} ` +
+          `for ${amount} attached. ` +
+          `The payment due date is ${dueDate}.\n\n` +
+          `Thank you!`;
+      } else {
+        fallbackMessage =
+          `Dear ${clientName},\n\n` +
+          `Please find invoice ${invoiceNumber} ` +
+          `for ${amount} attached. ` +
+          `The payment due date is ${dueDate}.\n\n` +
+          `Please arrange payment by the due date.\n\n` +
+          `Kind regards.`;
+      }
+    }
   }
 
-  const message = aiMessage || fallbackMessage;
+  const message =
+    aiMessage || fallbackMessage;
 
   // ------------------------------------------------------------
-  // 6. Email delivery
+  // 7. Email delivery
   // ------------------------------------------------------------
   let emailResult:
     | {
@@ -810,8 +929,9 @@ case "send_invoice": {
       }
     | null = null;
 
-  if ((channel === "email" || channel === "both") && email) {
-    const apiKey = process.env.RESEND_API_KEY;
+  if (channel === "email" && email) {
+    const apiKey =
+      process.env.RESEND_API_KEY;
 
     if (!apiKey) {
       return fail(
@@ -821,20 +941,29 @@ case "send_invoice": {
     }
 
     const pdfBase64 =
-      Buffer.from(pdfBytes).toString("base64");
+      Buffer.from(pdfBytes).toString(
+        "base64",
+      );
 
     const emailResponse = await fetch(
       "https://api.resend.com/emails",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
+          Authorization:
+            `Bearer ${apiKey}`,
+          "Content-Type":
+            "application/json",
         },
         body: JSON.stringify({
-          from: "Duely <billing@yalladuely.com>",
+          from:
+            "Duely <billing@yalladuely.com>",
+
           to: [email],
-          subject: `Invoice ${invoice.invoice_number} from ${"Duely"}`,
+
+          subject:
+            `Invoice ${invoiceNumber} from ${companyName}`,
+
           html: message
             .split("\n")
             .map((line) =>
@@ -843,9 +972,11 @@ case "send_invoice": {
                 : "<br />",
             )
             .join(""),
+
           attachments: [
             {
-              filename: `invoice-${invoice.invoice_number}.pdf`,
+              filename:
+                `invoice-${invoiceNumber}.pdf`,
               content: pdfBase64,
             },
           ],
@@ -853,7 +984,10 @@ case "send_invoice": {
       },
     );
 
-    const emailBody = await emailResponse.json().catch(() => null);
+    const emailBody =
+      await emailResponse
+        .json()
+        .catch(() => null);
 
     if (!emailResponse.ok) {
       emailResult = {
@@ -873,17 +1007,7 @@ case "send_invoice": {
   }
 
   // ------------------------------------------------------------
-  // 7. WhatsApp delivery
-  // ------------------------------------------------------------
-  //
-  // IMPORTANT:
-  // The current repository does not contain an existing WhatsApp
-  // provider implementation. We therefore keep this branch
-  // provider-safe instead of pretending that WhatsApp was sent.
-  //
-  // Once Meta WhatsApp Cloud API credentials are configured,
-  // this branch can be connected without changing the invoice
-  // or approval architecture.
+  // 8. WhatsApp delivery
   // ------------------------------------------------------------
   let whatsappResult:
     | {
@@ -894,14 +1018,17 @@ case "send_invoice": {
       }
     | null = null;
 
-  if ((channel === "whatsapp" || channel === "both") && phone) {
+  if (channel === "whatsapp" && phone) {
     const whatsappToken =
       process.env.WHATSAPP_ACCESS_TOKEN;
 
     const whatsappPhoneNumberId =
       process.env.WHATSAPP_PHONE_NUMBER_ID;
 
-    if (!whatsappToken || !whatsappPhoneNumberId) {
+    if (
+      !whatsappToken ||
+      !whatsappPhoneNumberId
+    ) {
       whatsappResult = {
         attempted: false,
         sent: false,
@@ -911,30 +1038,43 @@ case "send_invoice": {
       };
     } else {
       const graphVersion =
-        process.env.WHATSAPP_GRAPH_VERSION ?? "v23.0";
+        process.env.WHATSAPP_GRAPH_VERSION ??
+        "v23.0";
 
-      const whatsappResponse = await fetch(
-        `https://graph.facebook.com/${graphVersion}/${whatsappPhoneNumberId}/messages`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${whatsappToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: phone.replace(/[^\d]/g, ""),
-            type: "text",
-            text: {
-              preview_url: false,
-              body: message,
+      const normalizedPhone =
+        phone.replace(/[^\d]/g, "");
+
+      const whatsappResponse =
+        await fetch(
+          `https://graph.facebook.com/${graphVersion}/${whatsappPhoneNumberId}/messages`,
+          {
+            method: "POST",
+            headers: {
+              Authorization:
+                `Bearer ${whatsappToken}`,
+              "Content-Type":
+                "application/json",
             },
-          }),
-        },
-      );
+            body: JSON.stringify({
+              messaging_product:
+                "whatsapp",
+
+              to: normalizedPhone,
+
+              type: "text",
+
+              text: {
+                preview_url: false,
+                body: message,
+              },
+            }),
+          },
+        );
 
       const whatsappBody =
-        await whatsappResponse.json().catch(() => null);
+        await whatsappResponse
+          .json()
+          .catch(() => null);
 
       if (!whatsappResponse.ok) {
         whatsappResult = {
@@ -956,51 +1096,50 @@ case "send_invoice": {
   }
 
   // ------------------------------------------------------------
-  // 8. Determine final delivery state
+  // 9. Determine final result
   // ------------------------------------------------------------
-  const emailSent = emailResult?.sent === true;
-  const whatsappSent = whatsappResult?.sent === true;
-
-  const requestedEmail =
-    channel === "email" || channel === "both";
-
-  const requestedWhatsApp =
-    channel === "whatsapp" || channel === "both";
-
   const successful =
-    (!requestedEmail || emailSent) &&
-    (!requestedWhatsApp || whatsappSent);
+    channel === "email"
+      ? emailResult?.sent === true
+      : whatsappResult?.sent === true;
 
   // ------------------------------------------------------------
-  // 9. Audit
+  // 10. Audit
   // ------------------------------------------------------------
   await audit(ctx, {
     entity_type: "invoice",
     entity_id: id,
+
     action: successful
       ? "invoice.sent"
       : "invoice.send_attempted",
+
     after_state: {
       channel,
       intent,
       tone,
       language,
+
+      is_overdue: isOverdue,
+
+      message_generated_by_ai:
+        Boolean(aiMessage),
+
       email: emailResult,
       whatsapp: whatsappResult,
-      message_generated: Boolean(aiMessage),
     },
   });
 
   // ------------------------------------------------------------
-  // 10. Return structured result
+  // 11. Return
   // ------------------------------------------------------------
   if (!successful) {
     return fail(
       "internal_error",
-      "Invoice delivery was not completed on all requested channels.",
+      "Invoice delivery was not completed.",
       {
         invoice_id: id,
-        invoice_number: invoice.invoice_number,
+        invoice_number: invoiceNumber,
         channel,
         email: emailResult,
         whatsapp: whatsappResult,
@@ -1010,8 +1149,9 @@ case "send_invoice": {
 
   return {
     sent: true,
+
     invoice_id: id,
-    invoice_number: invoice.invoice_number,
+    invoice_number: invoiceNumber,
 
     channel,
 
@@ -1020,11 +1160,15 @@ case "send_invoice": {
     language,
 
     message,
-    message_generated_by_ai: Boolean(aiMessage),
+    message_generated_by_ai:
+      Boolean(aiMessage),
+
+    overdue: isOverdue,
 
     pdf: {
       generated: true,
-      filename: `invoice-${invoice.invoice_number}.pdf`,
+      filename:
+        `invoice-${invoiceNumber}.pdf`,
     },
 
     email: emailResult,
