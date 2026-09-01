@@ -716,9 +716,10 @@ const resultRecord =
     : null;
 
 const isError =
-  resultRecord?.error !== undefined ||
-  resultRecord?.sent === false ||
-  resultRecord?.success === false;
+  action.tool_name === "send_invoice"
+    ? resultRecord?.sent !== true
+    : resultRecord?.error !== undefined ||
+      resultRecord?.success === false;
 
 const finalStatus =
   isError ? "failed" : "completed";
