@@ -297,24 +297,51 @@ export async function validateActionBeforeExecution(
     };
   }
 
-  try {
-    if (
-      !isValidApprovalSignature(
-        {
-          owner_id: action.owner_id,
-          intent: action.intent,
-          tool_name: action.tool_name,
-          autonomy_level: action.autonomy_level,
-          parameters: action.parameters,
-          entity_type: action.entity_type,
-          entity_id: action.entity_id,
-          state_hash: action.state_hash,
-          expires_at: action.expires_at,
-          status: action.status,
-        },
-        action.server_signature,
-      )
-    ) {
+try {
+  const expectedSignature = createApprovalSignature({
+    owner_id: action.owner_id,
+    intent: action.intent,
+    tool_name: action.tool_name,
+    autonomy_level: action.autonomy_level,
+    parameters: action.parameters,
+    entity_type: action.entity_type,
+    entity_id: action.entity_id,
+    state_hash: action.state_hash,
+    expires_at: action.expires_at,
+    status: action.status,
+  });
+
+  console.log("[Haseel Signature Debug]", {
+    action_id: action.id,
+    status: action.status,
+    has_server_signature: Boolean(action.server_signature),
+    server_signature_length:
+      typeof action.server_signature === "string"
+        ? action.server_signature.length
+        : 0,
+    expected_signature_length:
+      expectedSignature.length,
+    signatures_match:
+      action.server_signature === expectedSignature,
+  });
+
+  if (
+    !isValidApprovalSignature(
+      {
+        owner_id: action.owner_id,
+        intent: action.intent,
+        tool_name: action.tool_name,
+        autonomy_level: action.autonomy_level,
+        parameters: action.parameters,
+        entity_type: action.entity_type,
+        entity_id: action.entity_id,
+        state_hash: action.state_hash,
+        expires_at: action.expires_at,
+        status: action.status,
+      },
+      action.server_signature,
+    )
+  ) {
       return {
         valid: false,
         reason: "invalid_signature",
@@ -726,19 +753,9 @@ await audit(
 );
 
 return {
-  status:
-    finalStatus as ("completed" | "failed"),
-
-  message:
-    JSON.stringify(result),
+  status: finalStatus as ("completed" | "failed"),
+  message: getApprovalSuccessMessage(
+    action.tool_name,
+    result,
+  ),
 };
-  
-
-    return {
-      status: "completed" as const,
-      message: getApprovalSuccessMessage(
-        action.tool_name,
-        result,
-      ),
-    };
-  });
