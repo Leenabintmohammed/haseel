@@ -565,10 +565,28 @@ export const resolveAction = createServerFn({ method: "POST" })
       };
     }
 
-    const validation = await validateActionBeforeExecution(
-      context,
-      action,
-    );
+console.log("[Haseel Approval Debug]", {
+  action_id: action.id,
+  tool_name: action.tool_name,
+  status: action.status,
+  has_server_signature: Boolean(action.server_signature),
+  signature_length:
+    typeof action.server_signature === "string"
+      ? action.server_signature.length
+      : 0,
+  has_parameters: action.parameters !== null &&
+    action.parameters !== undefined,
+  parameters_type: typeof action.parameters,
+  entity_type: action.entity_type,
+  entity_id: action.entity_id,
+  has_state_hash: Boolean(action.state_hash),
+  has_expires_at: Boolean(action.expires_at),
+});
+
+const validation = await validateActionBeforeExecution(
+  context,
+  action,
+);
 
     if (!validation.valid) {
       await context.supabase
