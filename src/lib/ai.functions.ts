@@ -342,22 +342,21 @@ try {
       action.server_signature,
     )
   ) {
-      return {
-        valid: false,
-        reason: "invalid_signature",
-        message:
-          "This approval was not created by the server approval flow.",
-      };
-    }
-  } catch {
     return {
       valid: false,
-      reason: "signature_unavailable",
+      reason: "invalid_signature",
       message:
-        "Approval signing is not configured on the server.",
+        "This approval was not created by the server approval flow.",
     };
   }
-
+} catch {
+  return {
+    valid: false,
+    reason: "signature_unavailable",
+    message:
+      "Approval signing is not configured on the server.",
+  };
+}
   const now = new Date();
 
   if (action.expires_at) {
