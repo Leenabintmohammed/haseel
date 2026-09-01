@@ -383,11 +383,34 @@ export async function runOrchestrator(args: {
     ),
 send_invoice: makeTool(
   "send_invoice",
-  "Send an invoice to the client by email or WhatsApp after owner approval. Use WhatsApp when the user explicitly requests WhatsApp.",
+  "Send an invoice to the client by email or WhatsApp after owner approval. Use WhatsApp when the user explicitly requests WhatsApp. Generate a client-facing message appropriate to the requested intent, tone, and language.",
   z.object({
     invoice_id: z.string(),
+
     channel: z
       .enum(["email", "whatsapp"])
+      .optional(),
+
+    message: z
+      .string()
+      .optional(),
+
+    intent: z
+      .string()
+      .optional(),
+
+    tone: z
+      .enum([
+        "professional",
+        "friendly",
+        "firm",
+        "polite",
+        "urgent",
+      ])
+      .optional(),
+
+    language: z
+      .enum(["en", "ar"])
       .optional(),
   }),
 ),
