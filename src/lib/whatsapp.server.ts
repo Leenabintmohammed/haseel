@@ -26,6 +26,44 @@ type WhatsAppContext = {
   userId: string;
 };
 
+async function uploadInvoicePDF(
+  supabase: SupabaseClient,
+  invoiceId: string,
+  invoiceNumber: string,
+  pdfBytes: Uint8Array,
+) {
+  const filePath = `${invoiceId}/invoice-${invoiceNumber}.pdf`;
+
+  const { error: uploadError } =
+    await supabase.storage
+      .from("invoices")
+      .upload(filePath, pdfBytes, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+
+  if (uploadError) {
+    throw new Error(
+      `Invoice PDF upload failed: ${uploadError.message}`,
+    );
+  }
+
+  const { data, error: urlError } =
+    await supabase.storage
+      .from("invoices")
+      .createSignedUrl(filePath, 600);
+
+  if (urlError || !data?.signedUrl) {
+    throw new Error(
+      `Invoice PDF URL creation failed: ${
+        urlError?.message ?? "No signed URL returned."
+      }`,
+    );
+  }
+
+  return data.signedUrl;
+}
+
 function num(value: unknown, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
