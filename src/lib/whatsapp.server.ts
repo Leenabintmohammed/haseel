@@ -50,10 +50,10 @@ async function uploadInvoicePDF(
     );
   }
 
-  const { data, error: urlError } =
-    await supabase.storage
-      .from("invoices")
-      .createSignedUrl(filePath, 600);
+const { data, error: urlError } =
+  await supabaseAdmin.storage
+    .from("invoices")
+    .createSignedUrl(filePath, 600);
 
   if (urlError || !data?.signedUrl) {
     throw new Error(
