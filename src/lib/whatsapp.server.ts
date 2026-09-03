@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { generateInvoicePDF } from "./pdf-generator.server";
 import { setInvoiceStatus } from "./finance.server";
 import {
   sendMessage,
+  sendDocument,
 } from "./messaging/messaging.server";
 
 export type WhatsAppMessageInput = {
@@ -155,10 +157,17 @@ export async function sendWhatsAppMessage(
 }
 
 /**
- * Sends an invoice notification over WhatsApp.
+ * Sends an invoice over WhatsApp.
  *
- * PDF delivery will be added once invoice storage/public
- * file URLs are implemented.
+ * Flow:
+ * 1. Validate invoice
+ * 2. Resolve client
+ * 3. Generate PDF
+ * 4. Upload PDF to Supabase Storage
+ * 5. Create signed URL
+ * 6. Send AI-generated message
+ * 7. Send PDF through Twilio
+ * 8. Mark invoice as sent
  */
 export async function sendWhatsAppInvoice(
   ctx: WhatsAppContext,
@@ -253,32 +262,221 @@ export async function sendWhatsAppInvoice(
     };
   }
 
+  const {
+    data: items,
+    error: itemsError,
+  } = await ctx.supabase
+    .from("invoice_items")
+    .select(
+      "description, quantity, unit_price, line_total",
+    )
+    .eq("invoice_id", invoiceId)
+    .eq("owner_id", ctx.userId)
+    .order("sort_order", {
+      ascending: true,
+    });
+
+  if (itemsError) {
+    return {
+      sent: false,
+      simulated: false,
+      channel: "whatsapp",
+      recipient,
+      whatsapp_message_id: null,
+      error: "internal_error",
+      message: itemsError.message,
+    };
+  }
+
+  const {
+    data: profile,
+    error: profileError,
+  } = await ctx.supabase
+    .from("profiles")
+    .select("company_name, address")
+    .eq("id", ctx.userId)
+    .maybeSingle();
+
+  if (profileError) {
+    return {
+      sent: false,
+      simulated: false,
+      channel: "whatsapp",
+      recipient,
+      whatsapp_message_id: null,
+      error: "internal_error",
+      message: profileError.message,
+    };
+  }
+
   /**
-   * Send the AI-generated invoice message.
+   * Generate invoice PDF.
    */
-  const result = await sendMessage({
+  let pdfBytes: Uint8Array;
+
+  try {
+    pdfBytes = await generateInvoicePDF({
+      invoice_number:
+        invoice.invoice_number,
+
+      issue_date:
+        invoice.issue_date?.slice(0, 10) ??
+        new Date()
+          .toISOString()
+          .slice(0, 10),
+
+      due_date:
+        invoice.due_date?.slice(0, 10) ??
+        new Date()
+          .toISOString()
+          .slice(0, 10),
+
+      client_name:
+        client?.name ?? "Client",
+
+      client_email:
+        undefined,
+
+      company_name:
+        profile?.company_name ??
+        "Your Company",
+
+      company_address:
+        profile?.address ??
+        undefined,
+
+      currency:
+        invoice.currency ??
+        "AED",
+
+      amount:
+        num(invoice.amount),
+
+      subtotal:
+        num(invoice.subtotal),
+
+      discount:
+        num(invoice.discount),
+
+      tax:
+        num(invoice.tax),
+
+      paid_amount:
+        num(invoice.paid_amount),
+
+      items:
+        (items ?? []).map((item) => ({
+          description:
+            item.description,
+
+          quantity:
+            num(item.quantity, 1),
+
+          unit_price:
+            num(item.unit_price),
+
+          line_total:
+            num(item.line_total),
+        })),
+
+      notes:
+        invoice.notes ??
+        undefined,
+    });
+  } catch (error) {
+    return {
+      sent: false,
+      simulated: false,
+      channel: "whatsapp",
+      recipient,
+      whatsapp_message_id: null,
+      error: "pdf_generation_failed",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Failed to generate invoice PDF.",
+    };
+  }
+
+  /**
+   * Upload PDF and create a temporary signed URL.
+   */
+  let pdfUrl: string;
+
+  try {
+    pdfUrl = await uploadInvoicePDF(
+      ctx.supabase,
+      invoiceId,
+      invoice.invoice_number,
+      pdfBytes,
+    );
+  } catch (error) {
+    return {
+      sent: false,
+      simulated: false,
+      channel: "whatsapp",
+      recipient,
+      whatsapp_message_id: null,
+      error: "pdf_upload_failed",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Failed to upload invoice PDF.",
+    };
+  }
+
+  /**
+   * Send the AI-generated message.
+   */
+  const textResult = await sendMessage({
     to: recipient,
     body: message,
   });
 
-  if (!result.success) {
+  if (!textResult.success) {
     return {
       sent: false,
       simulated: false,
       channel: "whatsapp",
       recipient,
       whatsapp_message_id:
-        result.providerMessageId ?? null,
+        textResult.providerMessageId ?? null,
       error: "delivery_failed",
       message:
-        result.error ??
+        textResult.error ??
         "WhatsApp invoice message failed to send.",
     };
   }
 
   /**
-   * Mark the invoice as sent after successful
-   * WhatsApp delivery.
+   * Send the invoice PDF through Twilio.
+   */
+  const documentResult = await sendDocument({
+    to: recipient,
+    fileUrl: pdfUrl,
+    fileName:
+      `invoice-${invoice.invoice_number}.pdf`,
+    body:
+      `Invoice ${invoice.invoice_number}`,
+  });
+
+  if (!documentResult.success) {
+    return {
+      sent: false,
+      simulated: false,
+      channel: "whatsapp",
+      recipient,
+      whatsapp_message_id:
+        textResult.providerMessageId ?? null,
+      error: "document_delivery_failed",
+      message:
+        documentResult.error ??
+        "The invoice message was sent, but the PDF could not be delivered.",
+    };
+  }
+
+  /**
+   * Mark invoice as sent.
    */
   const moved = await setInvoiceStatus(
     ctx,
@@ -297,10 +495,12 @@ export async function sendWhatsAppInvoice(
       channel: "whatsapp",
       recipient,
       whatsapp_message_id:
-        result.providerMessageId ?? null,
+        documentResult.providerMessageId ??
+        textResult.providerMessageId ??
+        null,
       error: "internal_error",
       message:
-        "The WhatsApp message was sent, but the invoice status could not be updated.",
+        "The WhatsApp messages were sent, but the invoice status could not be updated.",
     };
   }
 
@@ -310,7 +510,9 @@ export async function sendWhatsAppInvoice(
     channel: "whatsapp",
     recipient,
     whatsapp_message_id:
-      result.providerMessageId ?? null,
+      documentResult.providerMessageId ??
+      textResult.providerMessageId ??
+      null,
     invoice:
       (moved as {
         invoice?: unknown;
