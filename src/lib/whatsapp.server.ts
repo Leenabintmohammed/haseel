@@ -5,7 +5,7 @@ import {
   sendMessage,
   sendDocument,
 } from "./messaging/messaging.server";
-
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 export type WhatsAppMessageInput = {
   invoice_id: string;
   recipient: string;
@@ -37,7 +37,7 @@ async function uploadInvoicePDF(
   const filePath = `${invoiceId}/invoice-${invoiceNumber}.pdf`;
 
   const { error: uploadError } =
-    await supabase.storage
+    await supabaseAdmin.storage
       .from("invoices")
       .upload(filePath, pdfBytes, {
         contentType: "application/pdf",
