@@ -453,12 +453,18 @@ function getApprovalSuccessMessage(
       : {};
 
   switch (toolName) {
-    case "send_invoice":
-      return typeof data.recipient === "string" &&
-        data.recipient.length > 0
-        ? `Invoice sent successfully to ${data.recipient}.`
-        : "Invoice sent successfully.";
+case "send_invoice":
+  if (data.sent !== true) {
+    return typeof data.message === "string" &&
+      data.message.length > 0
+      ? data.message
+      : "Invoice was not sent.";
+  }
 
+  return typeof data.recipient === "string" &&
+    data.recipient.length > 0
+    ? `Invoice sent successfully to ${data.recipient}.`
+    : "Invoice sent successfully.";
     case "send_reminder":
       return typeof data.recipient === "string" &&
         data.recipient.length > 0
