@@ -121,6 +121,35 @@ export async function sendWhatsAppMessage(
     };
   }
 
+  const result = await sendMessage({
+    to: recipient,
+    body: input.message,
+  });
+
+  if (!result.success) {
+    return {
+      sent: false,
+      simulated: false,
+      channel: "whatsapp",
+      recipient,
+      whatsapp_message_id:
+        result.providerMessageId ?? null,
+      error: "delivery_failed",
+      message:
+        result.error ?? "WhatsApp message failed to send.",
+    };
+  }
+
+  return {
+    sent: true,
+    simulated: false,
+    channel: "whatsapp",
+    recipient,
+    whatsapp_message_id:
+      result.providerMessageId ?? null,
+  };
+}
+
   let accessToken: string;
   let phoneNumberId: string;
   let graphVersion: string;
