@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateInvoicePDF } from "./pdf-generator.server";
 import { setInvoiceStatus } from "./finance.server";
+import {
+  sendMessage,
+  sendDocument,
+} from "./messaging/messaging.server";
 
 export type WhatsAppMessageInput = {
   invoice_id: string;
