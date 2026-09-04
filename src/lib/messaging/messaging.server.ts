@@ -4,10 +4,9 @@ import type {
   SendMessageInput,
   SendMessageResult,
 } from "./types";
+import { wahaWhatsAppProvider } from "./providers/waha.server";
 
-import { twilioWhatsAppProvider } from "./providers/twilio.server";
-
-const provider: MessagingProvider = twilioWhatsAppProvider;
+const provider: MessagingProvider = wahaWhatsAppProvider;
 
 export function sendMessage(
   input: SendMessageInput,
