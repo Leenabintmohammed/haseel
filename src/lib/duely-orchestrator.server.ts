@@ -611,10 +611,24 @@ send_invoice: makeTool(
     const result = await generateText({
       model: getDuelyModel(),
       system: `${SYSTEM}\n\nCURRENT CONTEXT (JSON):\n${JSON.stringify(contextObject)}`,
-      messages: (history ?? []).map((h) => ({
-        role: h.role === "assistant" ? ("assistant" as const) : ("user" as const),
-        content: h.message,
-      })),
+messages: (() => {
+  const conversationMessages = (history ?? []).map((h) => ({
+    role:
+      h.role === "assistant"
+        ? ("assistant" as const)
+        : ("user" as const),
+    content: h.message,
+  }));
+
+  if (conversationMessages.length === 0 && args.message.trim()) {
+    conversationMessages.push({
+      role: "user",
+      content: args.message.trim(),
+    });
+  }
+
+  return conversationMessages;
+})(),
       tools,
       stopWhen: stepCountIs(50),
     });
