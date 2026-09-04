@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { runOrchestrator } from "@/lib/duely-orchestrator.server";
-import { wahaWhatsAppProvider } from "@/lib/messaging/providers/waha.server";
+import { runCustomerOrchestrator } from "@/lib/customer-orchestrator.server";import { wahaWhatsAppProvider } from "@/lib/messaging/providers/waha.server";
 
 type WahaPayload = {
   event?: string;
@@ -365,16 +364,15 @@ export const Route = createFileRoute("/api/webhooks/waha")({
             },
           );
 
-          const result = await runOrchestrator({
-            supabase: supabaseAdmin,
-            userId: client.owner_id,
-            message: text,
-            sessionId,
-            page: "whatsapp",
-            focus: null,
-            selection: [],
-          });
-
+const result = await runCustomerOrchestrator({
+  supabase: supabaseAdmin,
+  ownerId: client.owner_id,
+  clientId: client.id,
+  customerPhone,
+  message: text,
+  sessionId,
+});
+          
           console.log(
             "[WAHA Webhook] Orchestrator completed",
             {
