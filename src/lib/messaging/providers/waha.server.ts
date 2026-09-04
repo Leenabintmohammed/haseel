@@ -35,6 +35,80 @@ function normalizeChatId(phone: string): string {
   return `${digits}@c.us`;
 }
 
+export async function resolveWahaPhoneFromLid(
+  lid: string,
+): Promise<string | null> {
+  const { baseUrl, apiKey, session } = getConfig();
+  const normalizedLid = lid.replace(/@lid$/i, "");
+
+  if (!/^\d+$/.test(normalizedLid)) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(
+      `${baseUrl}/api/${encodeURIComponent(session)}/lids/${encodeURIComponent(normalizedLid)}`,
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "X-Api-Key": apiKey,
+        },
+      },
+    );
+
+    const text = await response.text();
+
+    if (!response.ok) {
+      console.warn(
+        "[WAHA] Failed to resolve LID",
+        normalizedLid,
+        response.status,
+        text,
+      );
+
+      return null;
+    }
+
+    let data: {
+      lid?: string;
+      pn?: string | null;
+    };
+
+    try {
+      data = JSON.parse(text) as {
+        lid?: string;
+        pn?: string | null;
+      };
+    } catch {
+      console.warn("[WAHA] Invalid LID response", text);
+      return null;
+    }
+
+    const phone = data.pn?.replace(/\D/g, "") || "";
+
+    if (!/^\d{8,15}$/.test(phone)) {
+      console.warn(
+        "[WAHA] LID resolved without valid phone",
+        normalizedLid,
+        data.pn,
+      );
+
+      return null;
+    }
+
+    console.log("[WAHA] LID resolved", {
+      lid: `${normalizedLid}@lid`,
+      phone,
+    });
+
+    return phone;
+  } catch (error) {
+    console.error("[WAHA] LID resolution failed", error);
+    return null;
+  }
+}
+
 async function parseResponse(response: Response) {
   const text = await response.text();
 
