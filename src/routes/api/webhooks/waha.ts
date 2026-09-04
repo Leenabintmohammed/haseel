@@ -208,6 +208,7 @@ export const Route = createFileRoute("/api/webhooks/waha")({
         }
 
         const sender = message.from || "";
+        const recipient = message.to || "";
 
         const text = (
           message.body ||
@@ -215,71 +216,93 @@ export const Route = createFileRoute("/api/webhooks/waha")({
           ""
         ).trim();
 
-        if (!sender || !text) {
+        if (!sender || !recipient || !text) {
           return Response.json({
             status: "ignored",
-            reason: "missing_phone_or_text",
+            reason: "missing_sender_recipient_or_text",
           });
         }
 
         /**
-         * WhatsApp may send incoming messages using:
+         * IMPORTANT:
          *
-         *   971xxxxxxxxx@c.us
+         * sender = العميل
+         * recipient = رقم WhatsApp الخاص بـ Haseel
          *
-         * or:
-         *
-         *   16179812950146@lid
-         *
-         * For @lid we resolve the real phone number through WAHA.
+         * لا نبحث عن العميل في profiles.phone.
+         * نبحث عنه في clients.phone ثم نأخذ owner_id
+         * لمعرفة حساب Haseel الذي يملك هذا العميل.
          */
-        const phone = await resolveWahaPhone(sender);
 
-        if (!phone) {
+        const customerPhone = await resolveWahaPhone(sender);
+
+        if (!customerPhone) {
           console.warn(
-            "[WAHA Webhook] Could not resolve sender phone",
+            "[WAHA Webhook] Could not resolve customer phone",
             sender,
           );
 
           return Response.json({
             status: "ignored",
-            reason: "unresolved_sender",
+            reason: "unresolved_customer",
+          });
+        }
+
+        const haseelWhatsAppPhone = extractPhone(recipient);
+
+        if (!haseelWhatsAppPhone) {
+          console.warn(
+            "[WAHA Webhook] Could not resolve Haseel recipient phone",
+            recipient,
+          );
+
+          return Response.json({
+            status: "ignored",
+            reason: "invalid_haseel_recipient",
           });
         }
 
         console.log(
-          "[WAHA Webhook] Sender resolved",
+          "[WAHA Webhook] Message routing",
           {
-            sender,
-            phone,
+            customerPhone,
+            haseelWhatsAppPhone,
+            text,
           },
         );
 
+        /**
+         * The customer's phone is already stored in clients.phone
+         * because this is the same number used when Haseel sent
+         * the invoice through WhatsApp.
+         */
         const phoneVariants = [
-          phone,
-          `+${phone}`,
-          `00${phone}`,
+          customerPhone,
+          `+${customerPhone}`,
+          `00${customerPhone}`,
         ];
 
         const {
-          data: profiles,
-          error: profileError,
+          data: clients,
+          error: clientError,
         } = await supabaseAdmin
-          .from("profiles")
-          .select("id, phone")
+          .from("clients")
+          .select(
+            "id, owner_id, phone, name",
+          )
           .in("phone", phoneVariants)
-          .limit(2);
+          .limit(10);
 
-        if (profileError) {
+        if (clientError) {
           console.error(
-            "[WAHA Webhook] Profile lookup failed",
-            profileError,
+            "[WAHA Webhook] Client lookup failed",
+            clientError,
           );
 
           return new Response(
             JSON.stringify({
               status: "error",
-              reason: "profile_lookup_failed",
+              reason: "client_lookup_failed",
             }),
             {
               status: 500,
@@ -290,40 +313,53 @@ export const Route = createFileRoute("/api/webhooks/waha")({
           );
         }
 
-        const profile = profiles?.find(
+        const client = clients?.find(
           (item) =>
-            normalizePhone(item.phone || "") === phone,
+            normalizePhone(item.phone || "") ===
+            customerPhone,
         );
 
-        if (!profile) {
+        if (!client?.owner_id) {
           console.warn(
-            "[WAHA Webhook] No Haseel account found for phone",
-            phone,
+            "[WAHA Webhook] No Haseel client found for phone",
+            customerPhone,
           );
 
           return Response.json({
             status: "ignored",
-            reason: "unknown_sender",
+            reason: "unknown_customer",
           });
         }
 
         console.log(
-          "[WAHA Webhook] Haseel account found",
+          "[WAHA Webhook] Client found",
           {
-            phone,
-            userId: profile.id,
+            customerPhone,
+            clientId: client.id,
+            clientName: client.name,
+            userId: client.owner_id,
           },
         );
 
+        /**
+         * Conversation is now associated with:
+         *
+         * Haseel account owner
+         * +
+         * customer phone
+         *
+         * This prevents conversations from different customers
+         * from being mixed together.
+         */
         const sessionId =
-          `whatsapp:${body.session || "default"}:${phone}`;
+          `whatsapp:${body.session || "default"}:${client.owner_id}:${customerPhone}`;
 
         try {
           console.log(
             "[WAHA Webhook] Sending message to orchestrator",
             {
-              phone,
-              userId: profile.id,
+              customerPhone,
+              userId: client.owner_id,
               sessionId,
               text,
             },
@@ -331,7 +367,7 @@ export const Route = createFileRoute("/api/webhooks/waha")({
 
           const result = await runOrchestrator({
             supabase: supabaseAdmin,
-            userId: profile.id,
+            userId: client.owner_id,
             message: text,
             sessionId,
             page: "whatsapp",
@@ -342,15 +378,17 @@ export const Route = createFileRoute("/api/webhooks/waha")({
           console.log(
             "[WAHA Webhook] Orchestrator completed",
             {
-              phone,
-              hasReply: Boolean(result.reply?.trim()),
+              customerPhone,
+              hasReply: Boolean(
+                result.reply?.trim(),
+              ),
             },
           );
 
           if (result.reply.trim()) {
             const sendResult =
               await wahaWhatsAppProvider.sendMessage({
-                to: phone,
+                to: customerPhone,
                 body: result.reply,
               });
 
@@ -369,8 +407,8 @@ export const Route = createFileRoute("/api/webhooks/waha")({
             console.log(
               "[WAHA Webhook] AI reply sent",
               {
-                phone,
-                userId: profile.id,
+                customerPhone,
+                userId: client.owner_id,
                 messageId: message.id,
                 providerMessageId:
                   sendResult.providerMessageId,
@@ -380,7 +418,9 @@ export const Route = createFileRoute("/api/webhooks/waha")({
 
           return Response.json({
             status: "ok",
-            replied: Boolean(result.reply.trim()),
+            replied: Boolean(
+              result.reply.trim(),
+            ),
           });
         } catch (error) {
           console.error(
