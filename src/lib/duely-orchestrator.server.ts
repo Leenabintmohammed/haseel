@@ -619,9 +619,24 @@ send_invoice: makeTool(
       stopWhen: stepCountIs(50),
     });
     reply = result.text?.trim() || "Done.";
+
   } catch (error) {
-    console.error("duely orchestrator error", error);
-    const message = error instanceof Error ? error.message : "";
+    console.error("[Haseel AI] Orchestrator error", {
+      name: error instanceof Error ? error.name : typeof error,
+      message: error instanceof Error ? error.message : String(error),
+      cause:
+        error instanceof Error && error.cause
+          ? error.cause
+          : undefined,
+      stack:
+        error instanceof Error
+          ? error.stack
+          : undefined,
+    });
+
+    const message =
+      error instanceof Error ? error.message : String(error);
+    
     if (message.includes("429"))
       reply = "Haseel AI is rate limited right now. Please try again in a moment.";
     else if (message.includes("402"))
