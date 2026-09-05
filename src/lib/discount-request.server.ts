@@ -1,4 +1,3 @@
-```ts
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recalcInvoiceTotals, type FinCtx } from "./finance.server";
 
@@ -421,4 +420,4 @@ export async function approveDiscountRequest({
     invoice: recalculated.invoice as Record<string, unknown>,
   };
 }
-```
+
