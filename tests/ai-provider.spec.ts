@@ -39,4 +39,15 @@ describe('AI provider selection', () => {
     const model = getDuelyModel('reasoning')
     expect(model).toMatchObject({ modelId: 'gpt-4.1-mini', provider: 'openai', apiKey: 'test-key' })
   })
+
+  it('uses gpt-4.1-mini for fast model', async () => {
+    process.env.OPENAI_API_KEY = 'test-key'
+
+    const { getDuelyModel, getDuelyModelId } = await import('../src/lib/ai-provider.server')
+
+    expect(getDuelyModelId('fast')).toBe('gpt-4.1-mini')
+
+    const model = getDuelyModel('fast')
+    expect(model).toMatchObject({ modelId: 'gpt-4.1-mini', provider: 'openai', apiKey: 'test-key' })
+  })
 })
