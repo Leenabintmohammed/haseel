@@ -54,6 +54,8 @@ export type ReminderClaimInput = {
 };
 
 const NON_RECEIVABLE_SET = new Set(NON_RECEIVABLE);
+export const PROCESSING_STALE_THRESHOLD_MINUTES = 15;
+const PROCESSING_STALE_THRESHOLD_MS = PROCESSING_STALE_THRESHOLD_MINUTES * 60 * 1000;
 
 export type ReminderEngineResult = {
   owner_id: string;
@@ -427,6 +429,7 @@ export async function processReminderEngineForOwner(args: {
       return (data as BusinessPaymentSettings | null) ?? null;
     },
     async claimReminderAttempt(row) {
+      const claimStartedAt = new Date().toISOString();
       const { error: insertError } = await args.supabase.from("reminders").insert({
         id: row.slot_id,
         owner_id: row.owner_id,
@@ -438,6 +441,7 @@ export async function processReminderEngineForOwner(args: {
         status: "processing",
         scheduled_at: row.scheduled_at,
         sent_at: null,
+        processing_started_at: claimStartedAt,
         days_overdue: row.days_overdue,
       });
       if (!insertError) {
@@ -456,6 +460,7 @@ export async function processReminderEngineForOwner(args: {
           message: row.message,
           scheduled_at: row.scheduled_at,
           sent_at: null,
+          processing_started_at: claimStartedAt,
           days_overdue: row.days_overdue,
         })
         .eq("id", row.slot_id)
@@ -468,6 +473,35 @@ export async function processReminderEngineForOwner(args: {
       }
       if (reclaimed?.id) {
         return { claimed: true, existingStatus: "failed" };
+      }
+
+      // External delivery cannot be made transactional with DB finalization.
+      // We only reclaim stale processing rows to provide bounded retries while
+      // minimizing duplicate sends when there is uncertainty.
+      const staleCutoffIso = new Date(Date.now() - PROCESSING_STALE_THRESHOLD_MS).toISOString();
+      const { data: staleReclaimed, error: staleReclaimError } = await args.supabase
+        .from("reminders")
+        .update({
+          status: "processing",
+          reminder_type: row.reminder_type,
+          message: row.message,
+          scheduled_at: row.scheduled_at,
+          sent_at: null,
+          processing_started_at: claimStartedAt,
+          days_overdue: row.days_overdue,
+        })
+        .eq("id", row.slot_id)
+        .eq("owner_id", row.owner_id)
+        .eq("status", "processing")
+        .not("processing_started_at", "is", null)
+        .lt("processing_started_at", staleCutoffIso)
+        .select("id")
+        .maybeSingle();
+      if (staleReclaimError) {
+        throw new Error(`Failed to recover stale reminder slot for invoice ${row.invoice_id}: ${staleReclaimError.message}`);
+      }
+      if (staleReclaimed?.id) {
+        return { claimed: true, existingStatus: "processing" };
       }
 
       const { data: existing, error: existingError } = await args.supabase
@@ -490,6 +524,7 @@ export async function processReminderEngineForOwner(args: {
         .update({
           status: input.status,
           sent_at: input.sentAt,
+          processing_started_at: null,
         })
         .eq("id", input.slotId)
         .eq("owner_id", input.ownerId)
