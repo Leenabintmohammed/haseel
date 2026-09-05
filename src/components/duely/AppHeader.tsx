@@ -12,6 +12,7 @@ const primaryNav: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", key: "dashboard" },
   { to: "/invoices", label: "Invoices", key: "invoices" },
   { to: "/clients", label: "Clients", key: "clients" },
+  { to: "/discount-requests", label: "Discount Requests", key: "discount_requests" },
   { to: "/payments", label: "Payments", key: "payments" },
   { to: "/settings", label: "Settings", key: "settings" },
 ];
