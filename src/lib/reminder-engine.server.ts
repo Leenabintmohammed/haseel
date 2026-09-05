@@ -41,21 +41,15 @@ export type ReminderInvoice = {
   } | null;
 };
 
-export type SentReminder = {
-  invoice_id: string | null;
-  sent_at: string | null;
-};
-
-export type ReminderInsert = {
+export type ReminderClaimInput = {
+  slot_id: string;
   owner_id: string;
   invoice_id: string;
   client_id: string;
   channel: "whatsapp";
   reminder_type: ReminderType;
   message: string;
-  status: "sent" | "failed";
   scheduled_at: string;
-  sent_at: string | null;
   days_overdue: number;
 };
 
@@ -87,10 +81,26 @@ export type ReminderEngineDependencies = {
   getReminderSettings(ownerId: string): Promise<ReminderSettings | null>;
   listOverdueInvoices(ownerId: string, localDate: string): Promise<ReminderInvoice[]>;
   getBusinessPaymentSettings(ownerId: string): Promise<BusinessPaymentSettings | null>;
-  listRecentlySentReminders(ownerId: string, invoiceIds: string[]): Promise<SentReminder[]>;
-  insertReminder(row: ReminderInsert): Promise<void>;
+  claimReminderAttempt(
+    row: ReminderClaimInput,
+  ): Promise<{ claimed: boolean; existingStatus: string | null }>;
+  finalizeReminderAttempt(args: {
+    slotId: string;
+    ownerId: string;
+    status: "sent" | "failed";
+    sentAt: string | null;
+  }): Promise<void>;
   sendWhatsApp(input: { to: string; body: string }): Promise<{ success: boolean; error?: string | null }>;
 };
+
+async function makeReminderSlotId(ownerId: string, invoiceId: string, localDate: string): Promise<string> {
+  const input = `reminder:whatsapp:${ownerId}:${invoiceId}:${localDate}`;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  const hex = Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
 
 function normalizeTimezone(value: string): string {
   try {
@@ -277,15 +287,6 @@ export async function runReminderEngineForOwner(
   }
 
   const paymentSettings = await deps.getBusinessPaymentSettings(ownerId);
-  const sentRows = await deps.listRecentlySentReminders(
-    ownerId,
-    invoices.map((invoice) => invoice.id),
-  );
-  const todaySent = new Set(
-    sentRows
-      .filter((row) => row.invoice_id && row.sent_at && toLocalDateKey(new Date(row.sent_at), timezone) === localDate)
-      .map((row) => row.invoice_id as string),
-  );
 
   let sent = 0;
   let failed = 0;
@@ -296,11 +297,6 @@ export async function runReminderEngineForOwner(
   for (const invoice of invoices) {
     if (invoice.owner_id !== ownerId || !invoiceCollectible(invoice) || invoice.due_date >= localDate) {
       skipped++;
-      continue;
-    }
-
-    if (todaySent.has(invoice.id)) {
-      alreadySent++;
       continue;
     }
 
@@ -328,6 +324,26 @@ export async function runReminderEngineForOwner(
       paymentLink: invoice.payment_link,
       paymentSettings,
     });
+    const slotId = await makeReminderSlotId(ownerId, invoice.id, localDate);
+    const claim = await deps.claimReminderAttempt({
+      slot_id: slotId,
+      owner_id: ownerId,
+      invoice_id: invoice.id,
+      client_id: invoice.client_id,
+      channel: "whatsapp",
+      reminder_type: reminderType,
+      message,
+      scheduled_at: scheduledAt,
+      days_overdue: daysOverdue,
+    });
+    if (!claim.claimed) {
+      if (claim.existingStatus === "sent") {
+        alreadySent++;
+      } else {
+        skipped++;
+      }
+      continue;
+    }
 
     const sendResult = await deps.sendWhatsApp({
       to: phone,
@@ -335,33 +351,21 @@ export async function runReminderEngineForOwner(
     });
 
     if (sendResult.success) {
-      await deps.insertReminder({
-        owner_id: ownerId,
-        invoice_id: invoice.id,
-        client_id: invoice.client_id,
-        channel: "whatsapp",
-        reminder_type: reminderType,
-        message,
+      await deps.finalizeReminderAttempt({
+        slotId,
+        ownerId,
         status: "sent",
-        scheduled_at: scheduledAt,
-        sent_at: scheduledAt,
-        days_overdue: daysOverdue,
+        sentAt: scheduledAt,
       });
       sent++;
       continue;
     }
 
-    await deps.insertReminder({
-      owner_id: ownerId,
-      invoice_id: invoice.id,
-      client_id: invoice.client_id,
-      channel: "whatsapp",
-      reminder_type: reminderType,
-      message,
+    await deps.finalizeReminderAttempt({
+      slotId,
+      ownerId,
       status: "failed",
-      scheduled_at: scheduledAt,
-      sent_at: null,
-      days_overdue: daysOverdue,
+      sentAt: null,
     });
     failed++;
   }
@@ -422,26 +426,81 @@ export async function processReminderEngineForOwner(args: {
       }
       return (data as BusinessPaymentSettings | null) ?? null;
     },
-    async listRecentlySentReminders(ownerId, invoiceIds) {
-      if (!invoiceIds.length) return [];
-      const since = new Date((args.now ?? new Date()).getTime() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    async claimReminderAttempt(row) {
+      const { error: insertError } = await args.supabase.from("reminders").insert({
+        id: row.slot_id,
+        owner_id: row.owner_id,
+        invoice_id: row.invoice_id,
+        client_id: row.client_id,
+        channel: row.channel,
+        reminder_type: row.reminder_type,
+        message: row.message,
+        status: "processing",
+        scheduled_at: row.scheduled_at,
+        sent_at: null,
+        days_overdue: row.days_overdue,
+      });
+      if (!insertError) {
+        return { claimed: true, existingStatus: null };
+      }
+
+      if (insertError.code !== "23505") {
+        throw new Error(`Failed to claim reminder slot for invoice ${row.invoice_id}: ${insertError.message}`);
+      }
+
+      const { data: reclaimed, error: reclaimError } = await args.supabase
+        .from("reminders")
+        .update({
+          status: "processing",
+          reminder_type: row.reminder_type,
+          message: row.message,
+          scheduled_at: row.scheduled_at,
+          sent_at: null,
+          days_overdue: row.days_overdue,
+        })
+        .eq("id", row.slot_id)
+        .eq("owner_id", row.owner_id)
+        .eq("status", "failed")
+        .select("id")
+        .maybeSingle();
+      if (reclaimError) {
+        throw new Error(`Failed to reclaim reminder slot for invoice ${row.invoice_id}: ${reclaimError.message}`);
+      }
+      if (reclaimed?.id) {
+        return { claimed: true, existingStatus: "failed" };
+      }
+
+      const { data: existing, error: existingError } = await args.supabase
+        .from("reminders")
+        .select("status")
+        .eq("id", row.slot_id)
+        .eq("owner_id", row.owner_id)
+        .maybeSingle();
+      if (existingError) {
+        throw new Error(`Failed to load existing reminder slot for invoice ${row.invoice_id}: ${existingError.message}`);
+      }
+      return {
+        claimed: false,
+        existingStatus: existing?.status ?? null,
+      };
+    },
+    async finalizeReminderAttempt(input) {
       const { data, error } = await args.supabase
         .from("reminders")
-        .select("invoice_id,sent_at")
-        .eq("owner_id", ownerId)
-        .eq("channel", "whatsapp")
-        .eq("status", "sent")
-        .in("invoice_id", invoiceIds)
-        .gte("sent_at", since);
+        .update({
+          status: input.status,
+          sent_at: input.sentAt,
+        })
+        .eq("id", input.slotId)
+        .eq("owner_id", input.ownerId)
+        .eq("status", "processing")
+        .select("id")
+        .maybeSingle();
       if (error) {
-        throw new Error(`Failed to load recent reminders for owner ${ownerId}: ${error.message}`);
+        throw new Error(`Failed to finalize reminder slot ${input.slotId}: ${error.message}`);
       }
-      return (data as SentReminder[] | null) ?? [];
-    },
-    async insertReminder(row) {
-      const { error } = await args.supabase.from("reminders").insert(row);
-      if (error) {
-        throw new Error(`Failed to persist reminder for invoice ${row.invoice_id}: ${error.message}`);
+      if (!data?.id) {
+        throw new Error(`Reminder slot ${input.slotId} was not in processing state during finalize.`);
       }
     },
     async sendWhatsApp(input) {

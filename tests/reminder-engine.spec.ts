@@ -5,11 +5,10 @@ import {
   resolveReminderType,
   runReminderEngineForOwner,
   type BusinessPaymentSettings,
+  type ReminderClaimInput,
   type ReminderEngineDependencies,
-  type ReminderInsert,
   type ReminderInvoice,
   type ReminderSettings,
-  type SentReminder,
 } from "../src/lib/reminder-engine.server";
 
 function makeInvoice(overrides: Partial<ReminderInvoice> = {}): ReminderInvoice {
@@ -31,20 +30,21 @@ function makeInvoice(overrides: Partial<ReminderInvoice> = {}): ReminderInvoice 
 function makeDeps(args: {
   settings?: Partial<ReminderSettings>;
   invoices?: ReminderInvoice[];
-  sentReminders?: SentReminder[];
   paymentSettings?: BusinessPaymentSettings | null;
   sendSuccess?: boolean;
-}): { deps: ReminderEngineDependencies; inserted: ReminderInsert[]; sentBodies: string[] } {
-  const inserted: ReminderInsert[] = [];
+}): {
+  deps: ReminderEngineDependencies;
+  getReminderRows: () => Array<ReminderClaimInput & { status: string; sent_at: string | null }>;
+  sentBodies: string[];
+} {
+  const reminderRows = new Map<string, ReminderClaimInput & { status: string; sent_at: string | null }>();
   const sentBodies: string[] = [];
   const settings = { ...DEFAULT_REMINDER_SETTINGS, timezone: "UTC", reminder_time: "10:00", ...(args.settings ?? {}) };
   const invoices = args.invoices ?? [makeInvoice()];
-  const sentReminders = args.sentReminders ?? [];
   const paymentSettings = args.paymentSettings ?? null;
   const sendSuccess = args.sendSuccess ?? true;
-
   return {
-    inserted,
+    getReminderRows: () => Array.from(reminderRows.values()),
     sentBodies,
     deps: {
       async getReminderSettings() {
@@ -56,11 +56,24 @@ function makeDeps(args: {
       async getBusinessPaymentSettings() {
         return paymentSettings;
       },
-      async listRecentlySentReminders() {
-        return sentReminders;
+      async claimReminderAttempt(row) {
+        const existing = reminderRows.get(row.slot_id);
+        if (!existing) {
+          reminderRows.set(row.slot_id, { ...row, status: "processing", sent_at: null });
+          return { claimed: true, existingStatus: null };
+        }
+        if (existing.status === "failed") {
+          reminderRows.set(row.slot_id, { ...row, status: "processing", sent_at: null });
+          return { claimed: true, existingStatus: "failed" };
+        }
+        return { claimed: false, existingStatus: existing.status };
       },
-      async insertReminder(row) {
-        inserted.push(row);
+      async finalizeReminderAttempt({ slotId, status, sentAt }) {
+        const existing = reminderRows.get(slotId);
+        if (!existing || existing.status !== "processing") {
+          throw new Error(`Slot ${slotId} not claimable for finalize`);
+        }
+        reminderRows.set(slotId, { ...existing, status, sent_at: sentAt });
       },
       async sendWhatsApp(input) {
         sentBodies.push(input.body);
@@ -86,7 +99,7 @@ describe("reminder engine processing", () => {
   const now = new Date("2026-09-05T12:00:00.000Z");
 
   it("skips paid and cancelled/non-collectible invoices", async () => {
-    const { deps, inserted } = makeDeps({
+    const { deps, getReminderRows } = makeDeps({
       invoices: [
         makeInvoice({ id: "p", status: "paid" }),
         makeInvoice({ id: "c", status: "cancelled" }),
@@ -95,7 +108,7 @@ describe("reminder engine processing", () => {
     });
     const result = await runReminderEngineForOwner("owner-a", deps, now);
     expect(result.sent).toBe(0);
-    expect(inserted).toHaveLength(0);
+    expect(getReminderRows()).toHaveLength(0);
   });
 
   it("includes payment link when present", async () => {
@@ -140,49 +153,76 @@ describe("reminder engine processing", () => {
   });
 
   it("prevents duplicate daily reminders", async () => {
-    const { deps, inserted } = makeDeps({
-      sentReminders: [{ invoice_id: "inv-1", sent_at: "2026-09-05T03:00:00.000Z" }],
-    });
-    const result = await runReminderEngineForOwner("owner-a", deps, now);
-    expect(result.already_sent_today).toBe(1);
-    expect(result.sent).toBe(0);
-    expect(inserted).toHaveLength(0);
+    const first = makeDeps({});
+    await runReminderEngineForOwner("owner-a", first.deps, now);
+    const second = await runReminderEngineForOwner("owner-a", first.deps, now);
+    expect(second.already_sent_today).toBe(1);
+    expect(second.sent).toBe(0);
   });
 
   it("respects disabled reminder settings", async () => {
-    const { deps, inserted } = makeDeps({
+    const { deps, getReminderRows } = makeDeps({
       settings: { enabled: false },
     });
     const result = await runReminderEngineForOwner("owner-a", deps, now);
     expect(result.settings_disabled).toBe(true);
-    expect(inserted).toHaveLength(0);
+    expect(getReminderRows()).toHaveLength(0);
   });
 
   it("waits until configured reminder_time in owner timezone", async () => {
-    const { deps, inserted } = makeDeps({
+    const { deps, getReminderRows } = makeDeps({
       settings: { timezone: "UTC", reminder_time: "14:00" },
     });
     const result = await runReminderEngineForOwner("owner-a", deps, now);
     expect(result.waiting_for_time_window).toBe(true);
     expect(result.sent).toBe(0);
-    expect(inserted).toHaveLength(0);
+    expect(getReminderRows()).toHaveLength(0);
   });
 
   it("maintains tenant isolation", async () => {
-    const { deps, inserted } = makeDeps({
+    const { deps, getReminderRows } = makeDeps({
       invoices: [makeInvoice({ owner_id: "owner-b" })],
     });
     const result = await runReminderEngineForOwner("owner-a", deps, now);
     expect(result.sent).toBe(0);
     expect(result.skipped).toBe(1);
-    expect(inserted).toHaveLength(0);
+    expect(getReminderRows()).toHaveLength(0);
   });
 
   it("handles WhatsApp send failure safely", async () => {
-    const { deps, inserted } = makeDeps({ sendSuccess: false });
+    const { deps, getReminderRows } = makeDeps({ sendSuccess: false });
     const result = await runReminderEngineForOwner("owner-a", deps, now);
     expect(result.failed).toBe(1);
-    expect(inserted).toHaveLength(1);
-    expect(inserted[0]?.status).toBe("failed");
+    expect(getReminderRows()).toHaveLength(1);
+    expect(getReminderRows()[0]?.status).toBe("failed");
+  });
+
+  it("prevents duplicate concurrent sends for same invoice/day", async () => {
+    const shared = makeDeps({});
+    let release!: () => void;
+    const sendGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let firstSendStarted = false;
+
+    shared.deps.sendWhatsApp = async (input) => {
+      if (!firstSendStarted) {
+        firstSendStarted = true;
+        shared.sentBodies.push(input.body);
+        await sendGate.promise;
+        return { success: true };
+      }
+      shared.sentBodies.push(input.body);
+      return { success: true };
+    };
+
+    const runA = runReminderEngineForOwner("owner-a", shared.deps, now);
+    const runB = runReminderEngineForOwner("owner-a", shared.deps, now);
+    release();
+    const [a, b] = await Promise.all([runA, runB]);
+
+    expect(a.sent + b.sent).toBe(1);
+    expect(a.already_sent_today + b.already_sent_today).toBe(1);
+    expect(shared.sentBodies).toHaveLength(1);
   });
 });
