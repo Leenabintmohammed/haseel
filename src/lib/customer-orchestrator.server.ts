@@ -1,4 +1,4 @@
-
+```ts
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText } from "ai";
 import {
@@ -101,13 +101,6 @@ type PaymentPlanFrequency =
   | "biweekly"
   | "monthly"
   | "quarterly";
-
-type PaymentPlanRequestIntent = {
-  isRequest: boolean;
-  installmentCount: number | null;
-  frequency: PaymentPlanFrequency;
-  reason: string;
-};
 
 type PaymentPlanInvoiceMatch =
   | {
@@ -514,6 +507,90 @@ function extractPaymentPlanInstallmentCount(
   return null;
 }
 
+/*
+ * Handles replies to our own question:
+ * "How many installments would you like to request?"
+ *
+ * Examples:
+ *   "4"
+ *   "4 installments"
+ *   "4 payments"
+ *   "على 4 دفعات"
+ *   "على 4 أقساط"
+ */
+function extractStandaloneInstallmentCount(
+  message: string,
+): number | null {
+  const normalized = normalizeMessage(message);
+
+  const numericPatterns = [
+    /^(\d+)$/i,
+    /^(\d+)\s+installments?$/i,
+    /^(\d+)\s+payments?$/i,
+    /^(\d+)\s+monthly payments?$/i,
+    /^(\d+)\s+weekly payments?$/i,
+    /^على\s*(\d+)\s*دفعات?$/u,
+    /^على\s*(\d+)\s*دفعة$/u,
+    /^على\s*(\d+)\s*أقساط?$/u,
+    /^على\s*(\d+)\s*اقساط?$/u,
+  ];
+
+  for (const pattern of numericPatterns) {
+    const match = normalized.match(pattern);
+
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const count = Number(match[1]);
+
+    if (
+      Number.isInteger(count) &&
+      count >= 2 &&
+      count <= 60
+    ) {
+      return count;
+    }
+  }
+
+  /*
+   * Common Arabic number words for small installment counts.
+   */
+  const arabicNumberWords: Record<string, number> = {
+    اثنين: 2,
+    اثنتين: 2,
+    ثلاثة: 3,
+    ثلاث: 3,
+    أربعة: 4,
+    اربع: 4,
+    أربع: 4,
+    خمسة: 5,
+    خمس: 5,
+    ستة: 6,
+    ست: 6,
+    سبعة: 7,
+    سبع: 7,
+    ثمانية: 8,
+    ثمان: 8,
+    تسعة: 9,
+    تسع: 9,
+    عشرة: 10,
+  };
+
+  const arabicMatch = normalized.match(
+    /^(?:على\s*)?(اثنين|اثنتين|ثلاثة|ثلاث|أربعة|اربع|أربع|خمسة|خمس|ستة|ست|سبعة|سبع|ثمانية|ثمان|تسعة|تسع|عشرة)\s*(?:دفعات?|دفعة|أقساط?|اقساط?)?$/u,
+  );
+
+  if (arabicMatch?.[1]) {
+    return (
+      arabicNumberWords[arabicMatch[1]] ??
+      null
+    );
+  }
+
+  return null;
+}
+
 function extractPaymentPlanFrequency(
   normalized: string,
 ): PaymentPlanFrequency {
@@ -707,6 +784,24 @@ function buildPaymentPlanRequestErrorReply(
     : "I couldn't create the payment plan request right now. Please try again.";
 }
 
+function isPaymentPlanInstallmentQuestion(
+  message: string,
+): boolean {
+  const normalized = normalizeMessage(message);
+
+  return (
+    /how many installments/i.test(normalized) ||
+    /how many payments/i.test(normalized) ||
+    /which number of installments/i.test(
+      normalized,
+    ) ||
+    /كم.*(?:دفعة|دفعات|قسط|أقساط|اقساط)/u.test(
+      normalized,
+    ) ||
+    /كم.*مرة.*السداد/u.test(normalized)
+  );
+}
+
 async function handlePaymentPlanRequest(input: {
   supabase: SupabaseClient;
   ownerId: string;
@@ -714,6 +809,7 @@ async function handlePaymentPlanRequest(input: {
   message: string;
   invoices: CustomerInvoice[];
   locale: "ar" | "en";
+  previousAssistantMessage?: string | null;
 }): Promise<{
   handled: boolean;
   reply: string | null;
@@ -722,24 +818,59 @@ async function handlePaymentPlanRequest(input: {
     input.message,
   );
 
-  if (!hasPaymentPlanKeyword(normalized)) {
-    return {
-      handled: false,
-      reply: null,
-    };
-  }
+  const isFollowUpToInstallmentQuestion =
+    Boolean(
+      input.previousAssistantMessage &&
+        isPaymentPlanInstallmentQuestion(
+          input.previousAssistantMessage,
+        ),
+    );
 
-  if (!hasExplicitPaymentPlanRequest(normalized)) {
-    return {
-      handled: false,
-      reply: null,
-    };
-  }
-
-  const installmentCount =
+  let installmentCount =
     extractPaymentPlanInstallmentCount(
       normalized,
     );
+
+  /*
+   * IMPORTANT:
+   * If the previous assistant message asked for
+   * the installment count, accept a bare follow-up
+   * like "4" or "4 installments".
+   */
+  if (
+    installmentCount === null &&
+    isFollowUpToInstallmentQuestion
+  ) {
+    installmentCount =
+      extractStandaloneInstallmentCount(
+        normalized,
+      );
+  }
+
+  /*
+   * A continuation of our own payment-plan question
+   * is a valid payment-plan flow even though the new
+   * customer message may contain no payment-plan keyword.
+   */
+  if (
+    !isFollowUpToInstallmentQuestion &&
+    !hasPaymentPlanKeyword(normalized)
+  ) {
+    return {
+      handled: false,
+      reply: null,
+    };
+  }
+
+  if (
+    !isFollowUpToInstallmentQuestion &&
+    !hasExplicitPaymentPlanRequest(normalized)
+  ) {
+    return {
+      handled: false,
+      reply: null,
+    };
+  }
 
   if (installmentCount === null) {
     return {
@@ -909,9 +1040,6 @@ function parseDiscountIntent(
     };
   }
 
-  /*
-   * A generic policy question is NOT a request.
-   */
   if (isGenericDiscountQuestion(normalized)) {
     return {
       isRequest: false,
@@ -921,13 +1049,6 @@ function parseDiscountIntent(
     };
   }
 
-  /*
-   * Require an actual request.
-   * This prevents messages such as:
-   * "discount policy?"
-   * "you mentioned discounts"
-   * from creating financial records.
-   */
   if (!hasExplicitDiscountRequest(normalized)) {
     return {
       isRequest: false,
@@ -948,14 +1069,6 @@ function parseDiscountIntent(
     discountPercent = Number(percentMatch[1]);
   }
 
-  /*
-   * Fixed amount detection.
-   *
-   * Examples:
-   * "give me 100 AED discount"
-   * "خصم 100"
-   * "100 درهم خصم"
-   */
   const fixedAmountMatch =
     normalized.match(
       /(?:discount|reduction|خصم|تخفيض)\s*(?:of\s*)?(\d+(?:\.\d+)?)/i,
@@ -970,9 +1083,6 @@ function parseDiscountIntent(
     );
   }
 
-  /*
-   * Reject obviously invalid financial requests.
-   */
   if (
     discountPercent !== null &&
     (discountPercent <= 0 ||
@@ -1018,10 +1128,6 @@ function getInvoiceIdentifierCandidates(
     }
   }
 
-  /*
-   * Also allow an explicit invoice number appearing alone,
-   * but do not treat arbitrary long numbers as invoice IDs.
-   */
   const tokens = normalized.split(/\s+/);
 
   for (const token of tokens) {
@@ -1666,6 +1772,20 @@ export async function runCustomerOrchestrator(
     });
   }
 
+  /*
+   * Because the current user message has already been inserted
+   * into history, this finds the most recent assistant response
+   * BEFORE the current message.
+   */
+  const previousAssistantMessage =
+    [...(history ?? [])]
+      .slice(0, -1)
+      .reverse()
+      .find(
+        (item) =>
+          item.role === "assistant",
+      )?.message ?? null;
+
   let reply =
     locale === "ar"
       ? "تعذر معالجة رسالتك حالياً. يرجى المحاولة مرة أخرى."
@@ -1683,6 +1803,7 @@ export async function runCustomerOrchestrator(
       message,
       invoices: customerInvoices,
       locale,
+      previousAssistantMessage,
     });
 
   if (paymentPlanResult.handled) {
@@ -2065,4 +2186,4 @@ ${JSON.stringify(context)}
 
   return { reply };
 }
-
+```
