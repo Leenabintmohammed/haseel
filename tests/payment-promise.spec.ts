@@ -275,6 +275,7 @@ describe("payment promise date parsing and intent detection", () => {
     expect(parsePaymentPromiseDate("I will transfer the amount in 2 days", { now: base, timezone: "UTC" })).toBe("2026-09-07");
     expect(parsePaymentPromiseDate("I'll pay on Friday", { now: base, timezone: "UTC" })).toBe("2026-09-11");
     expect(parsePaymentPromiseDate("I will pay on 7/9/2026", { now: base, timezone: "UTC" })).toBe("2026-09-07");
+    expect(parsePaymentPromiseDate("I will pay on 7 September 2026", { now: base, timezone: "UTC" })).toBe("2026-09-07");
   });
 
   it("parses supported Arabic dates", () => {
@@ -293,6 +294,11 @@ describe("payment promise date parsing and intent detection", () => {
       kind: "confirmed",
       locale: "en",
       promiseDate: "2026-09-06",
+    });
+    expect(detectPaymentPromiseIntent("I will pay on 7 September 2026", { now: base, timezone: "UTC" })).toEqual({
+      kind: "confirmed",
+      locale: "en",
+      promiseDate: "2026-09-07",
     });
     expect(detectPaymentPromiseIntent("سأدفع غداً", { now: base, timezone: "UTC" })).toEqual({
       kind: "confirmed",

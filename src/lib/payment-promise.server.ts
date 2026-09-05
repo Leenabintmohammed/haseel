@@ -322,7 +322,6 @@ export function detectPaymentPromiseIntent(
 
   const hasCommitment =
     /\b(?:i will|i ll|i'll|we will|we ll|we'll)\b.*\b(?:pay|transfer|send)\b/u.test(normalized) ||
-    /\b(?:pay|transfer|send)\b.*\b(?:tomorrow|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}[/-]\d{1,2}|20\d{2})\b/u.test(normalized) ||
     /(سأدفع|سادفع|سأحول|ساحول|سأرسل|سارسل|سأقوم بتحويل)/u.test(normalized);
   if (!hasCommitment) {
     return { kind: "none", locale };

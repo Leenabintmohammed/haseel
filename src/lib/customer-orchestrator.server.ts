@@ -469,7 +469,7 @@ export async function runCustomerOrchestrator(
     (paymentSettings as BusinessPaymentSettings | null | undefined) ?? null;
   const locale: "ar" | "en" =
     isArabicText(message) || client.preferred_language === "ar" ? "ar" : "en";
-  const customerTimezone = await getOwnerTimezone(supabase, ownerId);
+  const ownerTimezone = await getOwnerTimezone(supabase, ownerId);
 
   const context = {
     customer: {
@@ -561,7 +561,7 @@ export async function runCustomerOrchestrator(
     ? { kind: "none" as const, locale }
     : detectPaymentPromiseIntent(message, {
         now: new Date(),
-        timezone: customerTimezone,
+        timezone: ownerTimezone,
       });
   if (promiseIntent.kind === "confirmed") {
     const invoiceMatch = findPromiseInvoiceMatch(
