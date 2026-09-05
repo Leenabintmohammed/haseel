@@ -203,16 +203,18 @@ describe("runCustomerOrchestrator diagnostics", () => {
       sessionId: "session-3",
     });
 
-    const logged = errorSpy.mock.calls
-      .map((call) => call.map((part) => String(part)).join(" "))
-      .join("\n");
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[Customer AI] Generation failed",
+      expect.objectContaining({
+        name: "ProviderError",
+        message: "provider failed",
+        cause: "network_reset",
+      }),
+    );
 
-    expect(logged).toContain("[Customer AI] Generation failed");
-    expect(logged).toContain("ProviderError");
-    expect(logged).toContain("provider failed");
-    expect(logged).toContain("network_reset");
-    expect(logged).not.toContain("secret-openai-key");
-    expect(logged).not.toContain("INV-001");
-    expect(logged).not.toContain("1500");
+    const serialized = JSON.stringify(errorSpy.mock.calls);
+    expect(serialized).not.toContain("secret-openai-key");
+    expect(serialized).not.toContain("INV-001");
+    expect(serialized).not.toContain("1500");
   });
 });
