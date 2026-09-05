@@ -11,9 +11,17 @@ export const DUELY_MODELS = {
   fast: "gpt-4.1-mini",
 } as const;
 
-export function getDuelyModelId(kind: keyof typeof DUELY_MODELS = "default") {
+export function getDuelyBaseModelId(
+  kind: keyof typeof DUELY_MODELS = "default",
+) {
+  return DUELY_MODELS[kind];
+}
+
+export function getDuelyModelId(
+  kind: keyof typeof DUELY_MODELS = "default",
+) {
   const override = process.env["DUELY_AI_MODEL"];
-  return override || DUELY_MODELS[kind];
+  return override || getDuelyBaseModelId(kind);
 }
 
 export function getDuelyModel(kind: keyof typeof DUELY_MODELS = "default"): LanguageModel {

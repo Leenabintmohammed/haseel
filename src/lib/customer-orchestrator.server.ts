@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText } from "ai";
 import {
+  getDuelyBaseModelId,
   getDuelyModel,
   getDuelyModelId,
   hasAiProvider,
@@ -269,12 +270,16 @@ export async function runCustomerOrchestrator(
     "I couldn't process your message right now. Please try again.";
 
   const requestedModel = getDuelyModelId("fast");
+  const baseModel = getDuelyBaseModelId("fast");
+  const hasModelOverride = Boolean(process.env["DUELY_AI_MODEL"]);
   const lastUserMessage = [...messages]
     .reverse()
     .find((msg) => msg.role === "user")?.content;
 
   const generationDiagnostics = {
     model: requestedModel,
+    baseModel,
+    hasModelOverride,
     hasOpenAiApiKey: Boolean(process.env["OPENAI_API_KEY"]),
     messageCount: messages.length,
     lastUserMessageLength: lastUserMessage?.length ?? 0,

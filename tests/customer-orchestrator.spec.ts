@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const generateText = vi.fn();
 const getDuelyModel = vi.fn(() => ({ modelId: "gpt-4.1-mini" }));
+const getDuelyBaseModelId = vi.fn(() => "gpt-4.1-mini");
 const getDuelyModelId = vi.fn(() => "gpt-4.1-mini");
 const hasAiProvider = vi.fn(() => true);
 
@@ -11,6 +12,8 @@ vi.mock("ai", () => ({
 
 vi.mock("../src/lib/ai-provider.server", () => ({
   getDuelyModel: (...args: unknown[]) => getDuelyModel(...args),
+  getDuelyBaseModelId: (...args: unknown[]) =>
+    getDuelyBaseModelId(...args),
   getDuelyModelId: (...args: unknown[]) => getDuelyModelId(...args),
   hasAiProvider: (...args: unknown[]) => hasAiProvider(...args),
 }));

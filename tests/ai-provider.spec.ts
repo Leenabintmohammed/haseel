@@ -43,8 +43,9 @@ describe('AI provider selection', () => {
   it('uses gpt-4.1-mini for fast model', async () => {
     process.env.OPENAI_API_KEY = 'test-key'
 
-    const { getDuelyModel, getDuelyModelId } = await import('../src/lib/ai-provider.server')
+    const { getDuelyModel, getDuelyModelId, getDuelyBaseModelId } = await import('../src/lib/ai-provider.server')
 
+    expect(getDuelyBaseModelId('fast')).toBe('gpt-4.1-mini')
     expect(getDuelyModelId('fast')).toBe('gpt-4.1-mini')
 
     const model = getDuelyModel('fast')
