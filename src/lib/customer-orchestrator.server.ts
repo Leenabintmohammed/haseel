@@ -1,3 +1,4 @@
+```ts
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText } from "ai";
 import {
@@ -14,6 +15,7 @@ import {
   getOwnerTimezone,
 } from "./payment-promise.server";
 import { createDiscountRequest } from "./discount-request.server";
+import { createPaymentPlanRequest } from "./payment-plan-request.server";
 
 type CustomerOrchestratorArgs = {
   supabase: SupabaseClient;
@@ -94,6 +96,32 @@ type DiscountInvoiceMatch =
       kind: "none";
     };
 
+type PaymentPlanFrequency =
+  | "weekly"
+  | "biweekly"
+  | "monthly"
+  | "quarterly";
+
+type PaymentPlanRequestIntent = {
+  isRequest: boolean;
+  installmentCount: number | null;
+  frequency: PaymentPlanFrequency;
+  reason: string;
+};
+
+type PaymentPlanInvoiceMatch =
+  | {
+      kind: "matched";
+      invoice: CustomerInvoice;
+    }
+  | {
+      kind: "ambiguous";
+      invoices: CustomerInvoice[];
+    }
+  | {
+      kind: "none";
+    };
+
 function toFiniteNumber(value: number | null | undefined): number {
   return Number.isFinite(value) ? Number(value) : 0;
 }
@@ -114,7 +142,7 @@ function isArabicText(value: string): boolean {
 function normalizeMessage(value: string): string {
   return value
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}%.\s]/gu, " ")
+    .replace(/[^\p{L}\p{N}%. \s]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -397,6 +425,430 @@ function buildDirectCustomerReply(input: {
   }
 
   return null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Payment Plan Request                                                       */
+/* -------------------------------------------------------------------------- */
+
+function hasPaymentPlanKeyword(
+  normalized: string,
+): boolean {
+  return (
+    /\bpayment plan\b/i.test(normalized) ||
+    /\bpayment plans\b/i.test(normalized) ||
+    /\binstallment\b/i.test(normalized) ||
+    /\binstallments\b/i.test(normalized) ||
+    /\bpay in\b/i.test(normalized) ||
+    /\bpay over\b/i.test(normalized) ||
+    /\bsplit (the )?(invoice|payment|payments)\b/i.test(
+      normalized,
+    ) ||
+    /\bspread (the )?(payment|payments)\b/i.test(
+      normalized,
+    ) ||
+    /\bmonthly payments?\b/i.test(normalized) ||
+    /\bweekly payments?\b/i.test(normalized) ||
+    /تقسيط/u.test(normalized) ||
+    /أقساط/u.test(normalized) ||
+    /اقساط/u.test(normalized) ||
+    /دفعات/u.test(normalized) ||
+    /دفعة/u.test(normalized) ||
+    /خطة سداد/u.test(normalized) ||
+    /خطة دفع/u.test(normalized) ||
+    /سداد على/u.test(normalized)
+  );
+}
+
+function hasExplicitPaymentPlanRequest(
+  normalized: string,
+): boolean {
+  return (
+    /(can i|can you|could you|would you|i need|i want|i'd like|please|is it possible|request|split|spread|pay in|pay over)/i.test(
+      normalized,
+    ) ||
+    /(ممكن|هل ممكن|أريد|اريد|أحتاج|احتاج|أبغى|ابغى|لو سمحت|محتاج|قسم|قسّم|قسموا|قسّط|قسط|أقساط|اقساط|دفعات)/u.test(
+      normalized,
+    )
+  );
+}
+
+function extractPaymentPlanInstallmentCount(
+  normalized: string,
+): number | null {
+  const patterns = [
+    /(\d+)\s*installments?/i,
+    /(\d+)\s*payments?/i,
+    /pay\s*(?:in|over)\s*(\d+)/i,
+    /split.*?(\d+)\s*(?:payments?|installments?)/i,
+    /spread.*?(\d+)\s*(?:payments?|installments?)/i,
+    /(\d+)\s*monthly payments?/i,
+    /(\d+)\s*weekly payments?/i,
+    /(\d+)\s*دفعات?/u,
+    /(\d+)\s*دفعة/u,
+    /(\d+)\s*أقساط?/u,
+    /(\d+)\s*اقساط?/u,
+    /على\s*(\d+)\s*دفعات?/u,
+    /على\s*(\d+)\s*أقساط?/u,
+    /على\s*(\d+)\s*اقساط?/u,
+  ];
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const count = Number(match[1]);
+
+    if (
+      Number.isInteger(count) &&
+      count >= 2 &&
+      count <= 60
+    ) {
+      return count;
+    }
+  }
+
+  return null;
+}
+
+function extractPaymentPlanFrequency(
+  normalized: string,
+): PaymentPlanFrequency {
+  if (
+    /\bbiweekly\b/i.test(normalized) ||
+    /\bevery two weeks\b/i.test(normalized) ||
+    /كل أسبوعين/u.test(normalized) ||
+    /كل اسبوعين/u.test(normalized)
+  ) {
+    return "biweekly";
+  }
+
+  if (
+    /\bweekly\b/i.test(normalized) ||
+    /\bevery week\b/i.test(normalized) ||
+    /أسبوعي/u.test(normalized) ||
+    /اسبوعي/u.test(normalized) ||
+    /كل أسبوع/u.test(normalized) ||
+    /كل اسبوع/u.test(normalized)
+  ) {
+    return "weekly";
+  }
+
+  if (
+    /\bquarterly\b/i.test(normalized) ||
+    /\bevery three months\b/i.test(normalized) ||
+    /ربع سنوي/u.test(normalized)
+  ) {
+    return "quarterly";
+  }
+
+  return "monthly";
+}
+
+function getPaymentPlanInvoiceCandidates(
+  message: string,
+): string[] {
+  const normalized = normalizeMessage(message);
+  const candidates = new Set<string>();
+
+  const patterns = [
+    /invoice\s*#?\s*([a-z0-9_-]+)/i,
+    /inv\s*#?\s*([a-z0-9_-]+)/i,
+    /فاتورة\s*#?\s*([a-z0-9_-]+)/u,
+    /الفاتورة\s*#?\s*([a-z0-9_-]+)/u,
+  ];
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+
+    if (match?.[1]) {
+      candidates.add(match[1]);
+    }
+  }
+
+  return [...candidates];
+}
+
+function findPaymentPlanInvoiceMatch(
+  message: string,
+  invoices: CustomerInvoice[],
+): PaymentPlanInvoiceMatch {
+  const eligibleInvoices = invoices.filter(
+    (invoice) =>
+      toFiniteNumber(
+        invoice.remaining_balance,
+      ) > 0 &&
+      !["paid", "cancelled", "void", "draft"].includes(
+        String(invoice.status).toLowerCase(),
+      ),
+  );
+
+  if (eligibleInvoices.length === 0) {
+    return {
+      kind: "none",
+    };
+  }
+
+  const candidates =
+    getPaymentPlanInvoiceCandidates(message);
+
+  if (candidates.length > 0) {
+    const matched = eligibleInvoices.filter(
+      (invoice) => {
+        const invoiceNumber =
+          invoice.invoice_number
+            ?.trim()
+            .toLowerCase();
+
+        if (!invoiceNumber) {
+          return false;
+        }
+
+        return candidates.some(
+          (candidate) =>
+            invoiceNumber ===
+              candidate.toLowerCase() ||
+            invoiceNumber.includes(
+              candidate.toLowerCase(),
+            ),
+        );
+      },
+    );
+
+    if (matched.length === 1) {
+      return {
+        kind: "matched",
+        invoice: matched[0],
+      };
+    }
+
+    if (matched.length > 1) {
+      return {
+        kind: "ambiguous",
+        invoices: matched,
+      };
+    }
+
+    return {
+      kind: "none",
+    };
+  }
+
+  if (eligibleInvoices.length === 1) {
+    return {
+      kind: "matched",
+      invoice: eligibleInvoices[0],
+    };
+  }
+
+  return {
+    kind: "ambiguous",
+    invoices: eligibleInvoices,
+  };
+}
+
+function buildPaymentPlanInvoiceClarificationReply(
+  invoices: CustomerInvoice[],
+  locale: "ar" | "en",
+): string {
+  const list = invoices
+    .map(
+      (invoice) =>
+        invoice.invoice_number?.trim() ||
+        invoice.id,
+    )
+    .join(locale === "ar" ? "، " : ", ");
+
+  return locale === "ar"
+    ? `لديك أكثر من فاتورة غير مسددة. حدّد الفاتورة التي تريد طلب خطة سداد لها: ${list}.`
+    : `You have more than one unpaid invoice. Please tell me which invoice you want a payment plan for: ${list}.`;
+}
+
+function buildPaymentPlanUnavailableReply(
+  locale: "ar" | "en",
+): string {
+  return locale === "ar"
+    ? "لم أجد فاتورة غير مسددة مرتبطة بحسابك يمكن طلب تقسيطها."
+    : "I couldn't find an unpaid invoice on your account that can be put on a payment plan.";
+}
+
+function buildPaymentPlanMissingCountReply(
+  locale: "ar" | "en",
+): string {
+  return locale === "ar"
+    ? "بالتأكيد. كم دفعة تريد تقسيم الفاتورة عليها؟"
+    : "Certainly. How many installments would you like to request?";
+}
+
+function buildPaymentPlanRequestCreatedReply(
+  locale: "ar" | "en",
+): string {
+  return locale === "ar"
+    ? "تم إرسال طلب خطة السداد إلى صاحب العمل للمراجعة. سأخبرك بمجرد اتخاذ القرار."
+    : "I've sent your payment plan request to the business owner for review. I'll let you know once they make a decision.";
+}
+
+function buildPaymentPlanAlreadyPendingReply(
+  locale: "ar" | "en",
+): string {
+  return locale === "ar"
+    ? "يوجد بالفعل طلب خطة سداد قيد المراجعة لهذه الفاتورة."
+    : "There is already a pending payment plan request for this invoice.";
+}
+
+function buildPaymentPlanRequestErrorReply(
+  locale: "ar" | "en",
+): string {
+  return locale === "ar"
+    ? "تعذر إنشاء طلب خطة السداد حالياً. يرجى المحاولة مرة أخرى."
+    : "I couldn't create the payment plan request right now. Please try again.";
+}
+
+async function handlePaymentPlanRequest(input: {
+  supabase: SupabaseClient;
+  ownerId: string;
+  clientId: string;
+  message: string;
+  invoices: CustomerInvoice[];
+  locale: "ar" | "en";
+}): Promise<{
+  handled: boolean;
+  reply: string | null;
+}> {
+  const normalized = normalizeMessage(
+    input.message,
+  );
+
+  if (!hasPaymentPlanKeyword(normalized)) {
+    return {
+      handled: false,
+      reply: null,
+    };
+  }
+
+  if (!hasExplicitPaymentPlanRequest(normalized)) {
+    return {
+      handled: false,
+      reply: null,
+    };
+  }
+
+  const installmentCount =
+    extractPaymentPlanInstallmentCount(
+      normalized,
+    );
+
+  if (installmentCount === null) {
+    return {
+      handled: true,
+      reply:
+        buildPaymentPlanMissingCountReply(
+          input.locale,
+        ),
+    };
+  }
+
+  const invoiceMatch =
+    findPaymentPlanInvoiceMatch(
+      input.message,
+      input.invoices,
+    );
+
+  if (invoiceMatch.kind === "none") {
+    return {
+      handled: true,
+      reply:
+        buildPaymentPlanUnavailableReply(
+          input.locale,
+        ),
+    };
+  }
+
+  if (invoiceMatch.kind === "ambiguous") {
+    return {
+      handled: true,
+      reply:
+        buildPaymentPlanInvoiceClarificationReply(
+          invoiceMatch.invoices,
+          input.locale,
+        ),
+    };
+  }
+
+  const frequency =
+    extractPaymentPlanFrequency(normalized);
+
+  try {
+    await createPaymentPlanRequest({
+      supabase: input.supabase,
+      ownerId: input.ownerId,
+      clientId: input.clientId,
+      invoiceId: invoiceMatch.invoice.id,
+      requestedInstallmentCount:
+        installmentCount,
+      requestedFrequency: frequency,
+      reason: input.message.trim(),
+    });
+
+    console.log(
+      "[Customer AI] Payment plan request created",
+      {
+        ownerId: input.ownerId,
+        clientId: input.clientId,
+        invoiceId: invoiceMatch.invoice.id,
+        requestedInstallmentCount:
+          installmentCount,
+        requestedFrequency: frequency,
+      },
+    );
+
+    return {
+      handled: true,
+      reply:
+        buildPaymentPlanRequestCreatedReply(
+          input.locale,
+        ),
+    };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    if (
+      errorMessage ===
+      "payment_plan_request_already_pending"
+    ) {
+      return {
+        handled: true,
+        reply:
+          buildPaymentPlanAlreadyPendingReply(
+            input.locale,
+          ),
+      };
+    }
+
+    console.error(
+      "[Customer AI] Payment plan request creation failed",
+      {
+        ownerId: input.ownerId,
+        clientId: input.clientId,
+        invoiceId: invoiceMatch.invoice.id,
+        error: errorMessage,
+      },
+    );
+
+    return {
+      handled: true,
+      reply:
+        buildPaymentPlanRequestErrorReply(
+          input.locale,
+        ),
+    };
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -776,11 +1228,6 @@ async function handleDiscountRequest(input: {
       reason: intent.reason,
     });
 
-    /*
-     * The request itself is the authoritative owner-side notification
-     * record for the current phase. Owner dashboard/inbox can consume
-     * pending discount_requests immediately without changing the invoice.
-     */
     console.log(
       "[Customer AI] Discount request created",
       {
@@ -879,6 +1326,10 @@ RULES
 - You have NO tools and cannot approve financial changes.
 - Never approve or negotiate a discount yourself.
 - Never tell a customer that a discount has been approved unless an authoritative financial record says so.
+- Never approve or negotiate a payment plan yourself.
+- Never tell a customer that a payment plan has been approved unless an authoritative financial record says so.
+- A request for a payment plan must be treated as a request for owner review, not as an approved plan.
+- If the customer asks for a payment plan, do not promise approval.
 - If the customer asks about another customer or another account, do not provide information.
 - Reply in the same language as the customer: Arabic or English.
 - Keep replies concise, professional, and helpful.
@@ -1221,7 +1672,42 @@ export async function runCustomerOrchestrator(
       : "I couldn't process your message right now. Please try again.";
 
   /* ---------------------------------------------------------------------- */
-  /* 1. Discount Request                                                    */
+  /* 1. Payment Plan Request                                                */
+  /* ---------------------------------------------------------------------- */
+
+  const paymentPlanResult =
+    await handlePaymentPlanRequest({
+      supabase,
+      ownerId,
+      clientId,
+      message,
+      invoices: customerInvoices,
+      locale,
+    });
+
+  if (paymentPlanResult.handled) {
+    reply =
+      paymentPlanResult.reply ??
+      (locale === "ar"
+        ? "تعذر معالجة طلب خطة السداد."
+        : "I couldn't process the payment plan request.");
+
+    await supabase
+      .from("ai_conversations")
+      .insert({
+        owner_id: ownerId,
+        session_id: sessionId,
+        role: "assistant",
+        message: reply,
+        context:
+          conversationContext as never,
+      });
+
+    return { reply };
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* 2. Discount Request                                                    */
   /* ---------------------------------------------------------------------- */
 
   const discountResult =
@@ -1256,7 +1742,7 @@ export async function runCustomerOrchestrator(
   }
 
   /* ---------------------------------------------------------------------- */
-  /* 2. Direct Financial Answers                                            */
+  /* 3. Direct Financial Answers                                            */
   /* ---------------------------------------------------------------------- */
 
   const directReply =
@@ -1269,7 +1755,7 @@ export async function runCustomerOrchestrator(
     });
 
   /* ---------------------------------------------------------------------- */
-  /* 3. Payment Promise                                                     */
+  /* 4. Payment Promise                                                     */
   /* ---------------------------------------------------------------------- */
 
   const promiseIntent = directReply
@@ -1421,7 +1907,7 @@ export async function runCustomerOrchestrator(
   }
 
   /* ---------------------------------------------------------------------- */
-  /* 4. AI Conversation                                                     */
+  /* 5. AI Conversation                                                     */
   /* ---------------------------------------------------------------------- */
 
   const requestedModel =
@@ -1564,7 +2050,7 @@ ${JSON.stringify(context)}
   }
 
   /* ---------------------------------------------------------------------- */
-  /* 5. Persist Assistant Reply                                             */
+  /* 6. Persist Assistant Reply                                             */
   /* ---------------------------------------------------------------------- */
 
   await supabase
@@ -1579,3 +2065,4 @@ ${JSON.stringify(context)}
 
   return { reply };
 }
+```
