@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { runCustomerOrchestrator } from "@/lib/customer-orchestrator.server";import { wahaWhatsAppProvider } from "@/lib/messaging/providers/waha.server";
+import { runCustomerOrchestrator } from "@/lib/customer-orchestrator.server";
+import { wahaWhatsAppProvider } from "@/lib/messaging/providers/waha.server";
 
 type WahaPayload = {
   event?: string;
@@ -341,42 +342,70 @@ export const Route = createFileRoute("/api/webhooks/waha")({
         );
 
         /**
-         * Conversation is now associated with:
+         * IMPORTANT:
          *
-         * Haseel account owner
-         * +
-         * customer phone
+         * ai_conversations.session_id is a UUID in Supabase.
          *
-         * This prevents conversations from different customers
-         * from being mixed together.
+         * We therefore derive a stable UUID-like value from:
+         *
+         * WhatsApp session
+         * + Haseel owner
+         * + client ID
+         * + customer phone
+         *
+         * This keeps each customer's conversation isolated.
          */
-        const sessionId =
-          `whatsapp:${body.session || "default"}:${client.owner_id}:${customerPhone}`;
+
+        const sessionKey =
+          `whatsapp:${body.session || "default"}:${client.owner_id}:${client.id}:${customerPhone}`;
+
+        const hashBuffer = await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode(sessionKey),
+        );
+
+        const hash = Array.from(
+          new Uint8Array(hashBuffer),
+        )
+          .map((byte) =>
+            byte.toString(16).padStart(2, "0"),
+          )
+          .join("");
+
+        const sessionId = [
+          hash.slice(0, 8),
+          hash.slice(8, 12),
+          hash.slice(12, 16),
+          hash.slice(16, 20),
+          hash.slice(20, 32),
+        ].join("-");
 
         try {
           console.log(
-            "[WAHA Webhook] Sending message to orchestrator",
+            "[WAHA Webhook] Sending message to customer orchestrator",
             {
               customerPhone,
+              clientId: client.id,
               userId: client.owner_id,
               sessionId,
               text,
             },
           );
 
-const result = await runCustomerOrchestrator({
-  supabase: supabaseAdmin,
-  ownerId: client.owner_id,
-  clientId: client.id,
-  customerPhone,
-  message: text,
-  sessionId,
-});
-          
+          const result = await runCustomerOrchestrator({
+            supabase: supabaseAdmin,
+            ownerId: client.owner_id,
+            clientId: client.id,
+            customerPhone,
+            message: text,
+            sessionId,
+          });
+
           console.log(
-            "[WAHA Webhook] Orchestrator completed",
+            "[WAHA Webhook] Customer orchestrator completed",
             {
               customerPhone,
+              clientId: client.id,
               hasReply: Boolean(
                 result.reply?.trim(),
               ),
@@ -403,9 +432,10 @@ const result = await runCustomerOrchestrator({
             }
 
             console.log(
-              "[WAHA Webhook] AI reply sent",
+              "[WAHA Webhook] Customer AI reply sent",
               {
                 customerPhone,
+                clientId: client.id,
                 userId: client.owner_id,
                 messageId: message.id,
                 providerMessageId:
