@@ -6,6 +6,9 @@
     "nodejs_compat"
   ],
   "main": "@tanstack/react-start/server-entry",
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
   "observability": {
     "enabled": true
   }
