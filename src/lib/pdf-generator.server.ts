@@ -22,6 +22,7 @@ export interface InvoicePDFData {
     line_total: number;
   }>;
   notes?: string;
+  payment_link?: string | null;
 }
 
 export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Array> {
@@ -265,6 +266,35 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
   });
 
   renderRow("Amount Due", formatAmount(data.amount, data.currency), true);
+
+  if (data.payment_link?.trim()) {
+    mainY -= 15;
+    page.drawText("PAYMENT LINK", {
+      x: mainX,
+      y: mainY,
+      size: 7,
+      font: fontBold,
+      color: colors.mutedText,
+    });
+    mainY -= 10;
+
+    const paymentLinkLines = wrapText(
+      data.payment_link.trim(),
+      45,
+    );
+
+    for (const line of paymentLinkLines) {
+      page.drawText(line, {
+        x: mainX,
+        y: mainY,
+        size: 7.5,
+        font: fontRegular,
+        color: colors.rotanaGreen,
+        link: data.payment_link.trim(),
+      });
+      mainY -= 10;
+    }
+  }
 
   // --- 5. Notes ---
   if (data.notes) {

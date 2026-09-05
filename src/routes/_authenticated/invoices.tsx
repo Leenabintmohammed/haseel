@@ -16,6 +16,7 @@ Mail,
 MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InvoicePaymentLink } from "@/components/invoices/InvoicePaymentLink";
 import { StatusBadge } from "@/components/duely/StatusBadge";
 import {
   useClients,
@@ -513,7 +514,10 @@ function InvoiceDrawer({
   onPdf={onPdf}
   onAsk={onAsk}
 />
-            <DetailSection title="Line items">
+<InvoicePaymentLink
+  paymentLink={invoice.payment_link}
+/>
+<DetailSection title="Line items">
               {details.data.items.map((item) => (
                 <div
                   key={item.id}

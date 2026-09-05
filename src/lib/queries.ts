@@ -174,6 +174,7 @@ export type InvoiceRow = {
   due_date: string;
   issue_date: string;
   client_id: string;
+  payment_link?: string | null;
   clients?: {
   id: string;
   name: string;

@@ -22,6 +22,10 @@ import {
   round2,
 } from "./finance-core";
 import { fail, isFailure } from "./finance-errors";
+import {
+  normalizePaymentLinkForCreate,
+  normalizePaymentLinkForUpdate,
+} from "./payment-link";
 import { sendWhatsAppInvoice } from "./whatsapp.server";
 
 export type Autonomy = "auto" | "approval_required" | "human_only";
@@ -340,6 +344,20 @@ export async function executeTool(name: string, params: Record<string, unknown>,
     (p["invoice_number"] as string) ??
     (await nextInvoiceNumber(ctx));
 
+  let paymentLink: string | null;
+  try {
+    paymentLink = normalizePaymentLinkForCreate(
+      p["payment_link"],
+    );
+  } catch (error) {
+    return fail(
+      "validation_failed",
+      error instanceof Error
+        ? error.message
+        : "Payment link must be a valid URL.",
+    );
+  }
+
   const { data, error } =
     await ctx.supabase
       .from("invoices")
@@ -364,6 +382,7 @@ export async function executeTool(name: string, params: Record<string, unknown>,
         remaining_balance:
           totals.total,
         items: totals.items as never,
+        payment_link: paymentLink,
         notes:
           (p["notes"] as string) ??
           null,
@@ -451,7 +470,12 @@ export async function executeTool(name: string, params: Record<string, unknown>,
     case "update_invoice": {
       const id = p['invoice_id'] as string;
       if (!id) return fail("validation_failed", "invoice_id is required.");
-      const { data: current } = await ctx.supabase.from("invoices").select("*").eq("id", id).maybeSingle();
+      const { data: current } = await ctx.supabase
+        .from("invoices")
+        .select("*")
+        .eq("id", id)
+        .eq("owner_id", ctx.userId)
+        .maybeSingle();
       if (!current) return fail("not_found", "Invoice not found.", { invoice_id: id });
       const financialKeys = ["amount", "items", "currency", "discount_type", "discount_value", "tax_rate"];
       const touchesMoney = financialKeys.some((k) => p[k] !== undefined);
@@ -464,8 +488,29 @@ export async function executeTool(name: string, params: Record<string, unknown>,
       const patch: Record<string, unknown> = {};
       for (const k of ["currency", "due_date", "issue_date", "notes"])
         if (p[k] !== undefined) patch[k] = p[k];
+      if (p["payment_link"] !== undefined) {
+        try {
+          patch["payment_link"] =
+            normalizePaymentLinkForUpdate(
+              p["payment_link"],
+            ) ?? null;
+        } catch (error) {
+          return fail(
+            "validation_failed",
+            error instanceof Error
+              ? error.message
+              : "Payment link must be a valid URL.",
+          );
+        }
+      }
       if (Object.keys(patch).length) {
-        const { error } = await ctx.supabase.from("invoices").update(patch).eq("id", id).select("*").single();
+        const { error } = await ctx.supabase
+          .from("invoices")
+          .update(patch)
+          .eq("id", id)
+          .eq("owner_id", ctx.userId)
+          .select("*")
+          .single();
         if (error) return fail("internal_error", error.message);
       }
       if (p['amount'] !== undefined || p['discount_type'] !== undefined || p['discount_value'] !== undefined || p['tax_rate'] !== undefined || p['items'] !== undefined) {
@@ -479,7 +524,12 @@ export async function executeTool(name: string, params: Record<string, unknown>,
         if (isFailure(recalculated)) return recalculated;
       }
       await syncInvoice(ctx, id);
-      const { data } = await ctx.supabase.from("invoices").select("*").eq("id", id).maybeSingle();
+      const { data } = await ctx.supabase
+        .from("invoices")
+        .select("*")
+        .eq("id", id)
+        .eq("owner_id", ctx.userId)
+        .maybeSingle();
       await audit(ctx, {
         entity_type: "invoice",
         entity_id: id,
@@ -813,6 +863,9 @@ case "send_invoice": {
     notes:
       invoice.notes ??
       undefined,
+    payment_link:
+      invoice.payment_link ??
+      null,
   });
 
   // ------------------------------------------------------------

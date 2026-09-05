@@ -4,6 +4,10 @@ import { z } from "zod";
 import { getDuelyModel, hasAiProvider } from "./ai-provider.server";
 import { buildApprovalActionInput, createApprovalSignature } from "./ai.functions";
 import {
+  optionalPaymentLinkSchema,
+  updatablePaymentLinkSchema,
+} from "./payment-link";
+import {
   TOOL_AUTONOMY,
   executeTool,
   dashboardSummary,
@@ -359,6 +363,7 @@ export async function runOrchestrator(args: {
         due_date: z.string().optional(),
         description: z.string().optional(),
         notes: z.string().optional(),
+        payment_link: optionalPaymentLinkSchema,
       }),
     ),
     update_invoice: makeTool(
@@ -369,6 +374,7 @@ export async function runOrchestrator(args: {
         amount: z.number().optional(),
         due_date: z.string().optional(),
         notes: z.string().optional(),
+        payment_link: updatablePaymentLinkSchema,
       }),
     ),
     get_invoice: makeTool(

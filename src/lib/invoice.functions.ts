@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { optionalPaymentLinkSchema } from "@/lib/payment-link";
 
 const item = z.object({
   description: z.string().trim().min(1),
@@ -19,6 +20,7 @@ const invoiceInput = z.object({
   discount_value: z.coerce.number().nonnegative().optional(),
   tax_rate: z.coerce.number().min(0).max(100).optional(),
   notes: z.string().optional(),
+  payment_link: optionalPaymentLinkSchema,
 });
 
 export const createInvoiceFn = createServerFn({ method: "POST" })

@@ -102,6 +102,7 @@ export default defineEventHandler(async (event: H3Event) => {
       line_total: item.line_total || 0,
     })),
     notes: fullInvoice.notes,
+    payment_link: fullInvoice.payment_link,
   });
 
   return new Response(pdfBytes as BodyInit, {
@@ -111,5 +112,4 @@ export default defineEventHandler(async (event: H3Event) => {
     },
   });
 });
-
 
