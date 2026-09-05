@@ -36,6 +36,7 @@ const dict = {
     sent: "Sent",
     paid: "Paid",
     language: "Language",
+    discount_requests: "Discount Requests",
   },
   ar: {
     dashboard: "لوحة التحكم",
@@ -70,6 +71,7 @@ const dict = {
     sent: "مرسلة",
     paid: "مدفوعة",
     language: "اللغة",
+    discount_requests: "طلبات الخصم",
   },
 } as const;
 
