@@ -377,15 +377,32 @@ function isOutstandingAmountQuestion(
     normalizeMessage(message);
 
   return (
-    /(total outstanding amount|outstanding amount|total due|amount due|balance due)/i.test(
+    /^(may i|can i|could i|what is|what's|whats|how much|tell me|show me|give me).*total outstanding/i.test(
       normalized,
     ) ||
-    /((اجمالي|إجمالي|مجموع).*(المبلغ|الرصيد).*(المستحق|المتبقي))|(كم.*(المستحق|المتبقي))/u.test(
+    /total outstanding/i.test(
+      normalized,
+    ) ||
+    /outstanding amount/i.test(
+      normalized,
+    ) ||
+    /total due/i.test(
+      normalized,
+    ) ||
+    /amount due/i.test(
+      normalized,
+    ) ||
+    /balance due/i.test(
+      normalized,
+    ) ||
+    /outstanding balance/i.test(
+      normalized,
+    ) ||
+    /((اجمالي|إجمالي|مجموع).*(الفواتير|الفاتورة|المبلغ|الرصيد))|(كم.*(المستحق|المتبقي|الفواتير))/u.test(
       message,
     )
   );
-}
-
+} 
 function isPaymentLinkQuestion(
   message: string,
 ): boolean {
@@ -554,7 +571,6 @@ function buildDirectCustomerReply(
   return null;
 }
 
-
 function buildGreetingReply(
   message: string,
   locale: "ar" | "en",
@@ -578,7 +594,6 @@ function buildGreetingReply(
     ? "مرحباً، كيف يمكنني مساعدتك؟"
     : "Hi. How can I help you?";
 }
-
 /* -------------------------------------------------------------------------- */
 /* Payment Plan Request                                                       */
 /* -------------------------------------------------------------------------- */
@@ -2398,7 +2413,7 @@ export async function runCustomerOrchestrator(
   /* 0. Greeting                                                           */
   /* ---------------------------------------------------------------------- */
 
-  const greetingReply =
+const greetingReply =
     buildGreetingReply(
       message,
       locale,
@@ -2425,7 +2440,6 @@ export async function runCustomerOrchestrator(
         greetingReply,
     };
   }
-
 
   
   /* ---------------------------------------------------------------------- */
