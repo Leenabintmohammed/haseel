@@ -1,4 +1,4 @@
-```ts
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText } from "ai";
 import {
@@ -2186,4 +2186,3 @@ ${JSON.stringify(context)}
 
   return { reply };
 }
-```
