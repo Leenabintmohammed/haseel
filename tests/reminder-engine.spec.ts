@@ -39,6 +39,7 @@ function makeDeps(args: {
     ReminderClaimInput & { status: string; sent_at: string | null; processing_started_at: string | null }
   >;
   setReminderRowOwner: (slotId: string, ownerId: string) => void;
+  setProcessingStartedAt: (slotId: string, processingStartedAt: string | null) => void;
   sentBodies: string[];
 } {
   const staleThresholdMs = PROCESSING_STALE_THRESHOLD_MINUTES * 60 * 1000;
@@ -60,6 +61,13 @@ function makeDeps(args: {
       }
       reminderRows.set(slotId, { ...current, owner_id: ownerId });
     },
+    setProcessingStartedAt: (slotId, processingStartedAt) => {
+      const current = reminderRows.get(slotId);
+      if (!current) {
+        return;
+      }
+      reminderRows.set(slotId, { ...current, processing_started_at: processingStartedAt });
+    },
     sentBodies,
     deps: {
       async getReminderSettings() {
@@ -73,7 +81,7 @@ function makeDeps(args: {
       },
       async claimReminderAttempt(row) {
         const existing = reminderRows.get(row.slot_id);
-        const claimStartedAt = row.scheduled_at;
+        const claimStartedAt = new Date().toISOString();
         if (!existing) {
           reminderRows.set(row.slot_id, {
            ...row,
@@ -195,7 +203,7 @@ describe("reminder engine processing", () => {
     expect(text).not.toContain("Payment link:");
   });
 
-  it("E. sent row is never sent again", async () => {
+  it("sent row is never sent again", async () => {
     const first = makeDeps({});
     await runReminderEngineForOwner("owner-a", first.deps, now);
     const second = await runReminderEngineForOwner("owner-a", first.deps, now);
@@ -232,7 +240,7 @@ describe("reminder engine processing", () => {
     expect(getReminderRows()).toHaveLength(0);
   });
 
-  it("H. processing_started_at is cleared after failed finalization", async () => {
+  it("clears processing_started_at after failed finalization", async () => {
     const { deps, getReminderRows } = makeDeps({ sendSuccess: false });
     const result = await runReminderEngineForOwner("owner-a", deps, now);
     expect(result.failed).toBe(1);
@@ -241,7 +249,7 @@ describe("reminder engine processing", () => {
     expect(getReminderRows()[0]?.processing_started_at).toBeNull();
   });
 
-  it("G. processing_started_at is cleared after successful finalization", async () => {
+  it("clears processing_started_at after successful finalization", async () => {
     const { deps, getReminderRows } = makeDeps({});
     const result = await runReminderEngineForOwner("owner-a", deps, now);
     expect(result.sent).toBe(1);
@@ -249,32 +257,33 @@ describe("reminder engine processing", () => {
     expect(getReminderRows()[0]?.processing_started_at).toBeNull();
   });
 
-  it("A. fresh processing row is NOT reclaimed", async () => {
+  it("does not reclaim a fresh processing row", async () => {
     const shared = makeDeps({});
     const finalize = shared.deps.finalizeReminderAttempt;
     shared.deps.finalizeReminderAttempt = async () => {};
     await runReminderEngineForOwner("owner-a", shared.deps, now);
+    const slotId = shared.getReminderRows()[0]?.slot_id as string;
+    shared.setProcessingStartedAt(slotId, new Date(Date.now() - staleThresholdMs + 60_000).toISOString());
 
     shared.deps.finalizeReminderAttempt = finalize;
-    const freshRetryAt = new Date(now.getTime() + staleThresholdMs - 60_000);
-    const retryResult = await runReminderEngineForOwner("owner-a", shared.deps, freshRetryAt);
+    const retryResult = await runReminderEngineForOwner("owner-a", shared.deps, now);
 
     expect(retryResult.sent).toBe(0);
     expect(retryResult.skipped).toBe(1);
     expect(shared.sentBodies).toHaveLength(1);
   });
 
-  it("B/C. stale processing row IS reclaimed and proceeds through normal send flow", async () => {
+  it("reclaims stale processing row and completes normal send flow", async () => {
     const shared = makeDeps({});
     const finalize = shared.deps.finalizeReminderAttempt;
     shared.deps.finalizeReminderAttempt = async () => {};
     await runReminderEngineForOwner("owner-a", shared.deps, now);
     const firstSlotId = shared.getReminderRows()[0]?.slot_id;
     expect(firstSlotId).toBeDefined();
+    shared.setProcessingStartedAt(firstSlotId as string, new Date(Date.now() - staleThresholdMs - 60_000).toISOString());
 
     shared.deps.finalizeReminderAttempt = finalize;
-    const staleRetryAt = new Date(now.getTime() + staleThresholdMs + 60_000);
-    const retryResult = await runReminderEngineForOwner("owner-a", shared.deps, staleRetryAt);
+    const retryResult = await runReminderEngineForOwner("owner-a", shared.deps, now);
 
     expect(retryResult.sent).toBe(1);
     expect(shared.sentBodies).toHaveLength(2);
@@ -283,7 +292,7 @@ describe("reminder engine processing", () => {
     expect(shared.getReminderRows()[0]?.slot_id).toBe(firstSlotId);
   });
 
-  it("D/I. failed row remains retryable and deterministic slot ID remains unchanged", async () => {
+  it("keeps failed rows retryable with deterministic slot id", async () => {
     const shared = makeDeps({ sendSuccess: false });
     const first = await runReminderEngineForOwner("owner-a", shared.deps, now);
     expect(first.failed).toBe(1);
@@ -299,7 +308,7 @@ describe("reminder engine processing", () => {
     expect(shared.getReminderRows()[0]?.slot_id).toBe(firstSlotId);
   });
 
-  it("F. owner A cannot reclaim owner B processing row", async () => {
+  it("does not reclaim another owner's processing row", async () => {
     const shared = makeDeps({});
     const finalize = shared.deps.finalizeReminderAttempt;
     shared.deps.finalizeReminderAttempt = async () => {};
@@ -317,7 +326,7 @@ describe("reminder engine processing", () => {
     expect(shared.sentBodies).toHaveLength(1);
   });
 
-  it("J. concurrent claim behavior remains safe", async () => {
+  it("keeps concurrent claim behavior safe", async () => {
     const shared = makeDeps({});
     let release!: () => void;
     const sendGate = new Promise<void>((resolve) => {
