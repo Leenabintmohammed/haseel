@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildReminderMessage,
   DEFAULT_REMINDER_SETTINGS,
+  PROCESSING_STALE_THRESHOLD_MINUTES,
   resolveReminderType,
   runReminderEngineForOwner,
   type BusinessPaymentSettings,
@@ -34,10 +35,18 @@ function makeDeps(args: {
   sendSuccess?: boolean;
 }): {
   deps: ReminderEngineDependencies;
-  getReminderRows: () => Array<ReminderClaimInput & { status: string; sent_at: string | null }>;
+  getReminderRows: () => Array<
+    ReminderClaimInput & { status: string; sent_at: string | null; processing_started_at: string | null }
+  >;
+  setReminderRowOwner: (slotId: string, ownerId: string) => void;
+  setProcessingStartedAt: (slotId: string, processingStartedAt: string | null) => void;
   sentBodies: string[];
 } {
-  const reminderRows = new Map<string, ReminderClaimInput & { status: string; sent_at: string | null }>();
+  const staleThresholdMs = PROCESSING_STALE_THRESHOLD_MINUTES * 60 * 1000;
+  const reminderRows = new Map<
+    string,
+    ReminderClaimInput & { status: string; sent_at: string | null; processing_started_at: string | null }
+  >();
   const sentBodies: string[] = [];
   const settings = { ...DEFAULT_REMINDER_SETTINGS, timezone: "UTC", reminder_time: "10:00", ...(args.settings ?? {}) };
   const invoices = args.invoices ?? [makeInvoice()];
@@ -45,6 +54,20 @@ function makeDeps(args: {
   const sendSuccess = args.sendSuccess ?? true;
   return {
     getReminderRows: () => Array.from(reminderRows.values()),
+    setReminderRowOwner: (slotId, ownerId) => {
+      const current = reminderRows.get(slotId);
+      if (!current) {
+        return;
+      }
+      reminderRows.set(slotId, { ...current, owner_id: ownerId });
+    },
+    setProcessingStartedAt: (slotId, processingStartedAt) => {
+      const current = reminderRows.get(slotId);
+      if (!current) {
+        return;
+      }
+      reminderRows.set(slotId, { ...current, processing_started_at: processingStartedAt });
+    },
     sentBodies,
     deps: {
       async getReminderSettings() {
@@ -58,13 +81,40 @@ function makeDeps(args: {
       },
       async claimReminderAttempt(row) {
         const existing = reminderRows.get(row.slot_id);
+        const claimStartedAt = new Date().toISOString();
         if (!existing) {
-          reminderRows.set(row.slot_id, { ...row, status: "processing", sent_at: null });
+          reminderRows.set(row.slot_id, {
+           ...row,
+           status: "processing",
+           sent_at: null,
+           processing_started_at: claimStartedAt,
+          });
           return { claimed: true, existingStatus: null };
         }
+        if (existing.owner_id !== row.owner_id) {
+          return { claimed: false, existingStatus: null };
+        }
         if (existing.status === "failed") {
-          reminderRows.set(row.slot_id, { ...row, status: "processing", sent_at: null });
+          reminderRows.set(row.slot_id, {
+           ...row,
+           status: "processing",
+           sent_at: null,
+           processing_started_at: claimStartedAt,
+          });
           return { claimed: true, existingStatus: "failed" };
+        }
+        if (existing.status === "processing" && existing.processing_started_at) {
+          const existingStarted = new Date(existing.processing_started_at).getTime();
+          const nowTime = new Date(claimStartedAt).getTime();
+          if (Number.isFinite(existingStarted) && Number.isFinite(nowTime) && existingStarted < nowTime - staleThresholdMs) {
+           reminderRows.set(row.slot_id, {
+             ...row,
+             status: "processing",
+             sent_at: null,
+             processing_started_at: claimStartedAt,
+           });
+           return { claimed: true, existingStatus: "processing" };
+          }
         }
         return { claimed: false, existingStatus: existing.status };
       },
@@ -73,7 +123,7 @@ function makeDeps(args: {
         if (!existing || existing.status !== "processing") {
           throw new Error(`Slot ${slotId} not claimable for finalize`);
         }
-        reminderRows.set(slotId, { ...existing, status, sent_at: sentAt });
+        reminderRows.set(slotId, { ...existing, status, sent_at: sentAt, processing_started_at: null });
       },
       async sendWhatsApp(input) {
         sentBodies.push(input.body);
@@ -97,6 +147,7 @@ describe("reminder engine severity rules", () => {
 
 describe("reminder engine processing", () => {
   const now = new Date("2026-09-05T12:00:00.000Z");
+  const staleThresholdMs = PROCESSING_STALE_THRESHOLD_MINUTES * 60 * 1000;
 
   it("skips paid and cancelled/non-collectible invoices", async () => {
     const { deps, getReminderRows } = makeDeps({
@@ -152,7 +203,7 @@ describe("reminder engine processing", () => {
     expect(text).not.toContain("Payment link:");
   });
 
-  it("prevents duplicate daily reminders", async () => {
+  it("sent row is never sent again", async () => {
     const first = makeDeps({});
     await runReminderEngineForOwner("owner-a", first.deps, now);
     const second = await runReminderEngineForOwner("owner-a", first.deps, now);
@@ -189,15 +240,93 @@ describe("reminder engine processing", () => {
     expect(getReminderRows()).toHaveLength(0);
   });
 
-  it("handles WhatsApp send failure safely", async () => {
+  it("clears processing_started_at after failed finalization", async () => {
     const { deps, getReminderRows } = makeDeps({ sendSuccess: false });
     const result = await runReminderEngineForOwner("owner-a", deps, now);
     expect(result.failed).toBe(1);
     expect(getReminderRows()).toHaveLength(1);
     expect(getReminderRows()[0]?.status).toBe("failed");
+    expect(getReminderRows()[0]?.processing_started_at).toBeNull();
   });
 
-  it("prevents duplicate concurrent sends for same invoice/day", async () => {
+  it("clears processing_started_at after successful finalization", async () => {
+    const { deps, getReminderRows } = makeDeps({});
+    const result = await runReminderEngineForOwner("owner-a", deps, now);
+    expect(result.sent).toBe(1);
+    expect(getReminderRows()[0]?.status).toBe("sent");
+    expect(getReminderRows()[0]?.processing_started_at).toBeNull();
+  });
+
+  it("does not reclaim a fresh processing row", async () => {
+    const shared = makeDeps({});
+    const finalize = shared.deps.finalizeReminderAttempt;
+    shared.deps.finalizeReminderAttempt = async () => {};
+    await runReminderEngineForOwner("owner-a", shared.deps, now);
+    const slotId = shared.getReminderRows()[0]?.slot_id as string;
+    shared.setProcessingStartedAt(slotId, new Date(Date.now() - staleThresholdMs + 60_000).toISOString());
+
+    shared.deps.finalizeReminderAttempt = finalize;
+    const retryResult = await runReminderEngineForOwner("owner-a", shared.deps, now);
+
+    expect(retryResult.sent).toBe(0);
+    expect(retryResult.skipped).toBe(1);
+    expect(shared.sentBodies).toHaveLength(1);
+  });
+
+  it("reclaims stale processing row and completes normal send flow", async () => {
+    const shared = makeDeps({});
+    const finalize = shared.deps.finalizeReminderAttempt;
+    shared.deps.finalizeReminderAttempt = async () => {};
+    await runReminderEngineForOwner("owner-a", shared.deps, now);
+    const firstSlotId = shared.getReminderRows()[0]?.slot_id;
+    expect(firstSlotId).toBeDefined();
+    shared.setProcessingStartedAt(firstSlotId as string, new Date(Date.now() - staleThresholdMs - 60_000).toISOString());
+
+    shared.deps.finalizeReminderAttempt = finalize;
+    const retryResult = await runReminderEngineForOwner("owner-a", shared.deps, now);
+
+    expect(retryResult.sent).toBe(1);
+    expect(shared.sentBodies).toHaveLength(2);
+    expect(shared.getReminderRows()[0]?.status).toBe("sent");
+    expect(shared.getReminderRows()[0]?.processing_started_at).toBeNull();
+    expect(shared.getReminderRows()[0]?.slot_id).toBe(firstSlotId);
+  });
+
+  it("keeps failed rows retryable with deterministic slot id", async () => {
+    const shared = makeDeps({ sendSuccess: false });
+    const first = await runReminderEngineForOwner("owner-a", shared.deps, now);
+    expect(first.failed).toBe(1);
+    const firstSlotId = shared.getReminderRows()[0]?.slot_id;
+    expect(firstSlotId).toBeDefined();
+
+    shared.deps.sendWhatsApp = async (input) => {
+      shared.sentBodies.push(input.body);
+      return { success: true };
+    };
+    const second = await runReminderEngineForOwner("owner-a", shared.deps, new Date(now.getTime() + 60_000));
+    expect(second.sent).toBe(1);
+    expect(shared.getReminderRows()[0]?.slot_id).toBe(firstSlotId);
+  });
+
+  it("does not reclaim another owner's processing row", async () => {
+    const shared = makeDeps({});
+    const finalize = shared.deps.finalizeReminderAttempt;
+    shared.deps.finalizeReminderAttempt = async () => {};
+    await runReminderEngineForOwner("owner-a", shared.deps, now);
+    const slotId = shared.getReminderRows()[0]?.slot_id;
+    expect(slotId).toBeDefined();
+    const existingSlotId = slotId as string;
+
+    shared.setReminderRowOwner(existingSlotId, "owner-b");
+    shared.deps.finalizeReminderAttempt = finalize;
+    const retryResult = await runReminderEngineForOwner("owner-a", shared.deps, new Date(now.getTime() + staleThresholdMs + 60_000));
+
+    expect(retryResult.sent).toBe(0);
+    expect(retryResult.skipped).toBe(1);
+    expect(shared.sentBodies).toHaveLength(1);
+  });
+
+  it("keeps concurrent claim behavior safe", async () => {
     const shared = makeDeps({});
     let release!: () => void;
     const sendGate = new Promise<void>((resolve) => {
