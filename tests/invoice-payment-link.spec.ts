@@ -393,6 +393,7 @@ describe("invoice payment link display", () => {
     );
 
     expect(html).toContain('href="https://example-payment-provider.com/pay/123"');
+    expect(html).toContain('rel="noopener noreferrer"');
     expect(html).toContain(
       "https://example-payment-provider.com/pay/123",
     );

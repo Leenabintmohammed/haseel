@@ -269,6 +269,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
 
   if (data.payment_link?.trim()) {
     mainY -= 15;
+    const paymentLink = data.payment_link.trim();
     page.drawText("PAYMENT LINK", {
       x: mainX,
       y: mainY,
@@ -277,23 +278,15 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
       color: colors.mutedText,
     });
     mainY -= 10;
-
-    const paymentLinkLines = wrapText(
-      data.payment_link.trim(),
-      45,
-    );
-
-    for (const line of paymentLinkLines) {
-      page.drawText(line, {
-        x: mainX,
-        y: mainY,
-        size: 7.5,
-        font: fontRegular,
-        color: colors.rotanaGreen,
-        link: data.payment_link.trim(),
-      });
-      mainY -= 10;
-    }
+    page.drawText(paymentLink, {
+      x: mainX,
+      y: mainY,
+      size: 7.5,
+      font: fontRegular,
+      color: colors.rotanaGreen,
+      link: paymentLink,
+    });
+    mainY -= 10;
   }
 
   // --- 5. Notes ---

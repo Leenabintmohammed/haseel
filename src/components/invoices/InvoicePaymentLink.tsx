@@ -19,7 +19,7 @@ export function InvoicePaymentLink({
       <a
         href={href}
         target="_blank"
-        rel="noreferrer"
+        rel="noopener noreferrer"
         className="break-all text-sm text-primary underline underline-offset-4"
       >
         {href}
