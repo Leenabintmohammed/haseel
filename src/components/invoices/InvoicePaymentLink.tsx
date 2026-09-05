@@ -20,6 +20,7 @@ export function InvoicePaymentLink({
         href={href}
         target="_blank"
         rel="noopener noreferrer"
+        aria-label="Open invoice payment link"
         className="break-all text-sm text-primary underline underline-offset-4"
       >
         {href}

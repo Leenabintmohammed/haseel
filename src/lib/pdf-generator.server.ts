@@ -278,15 +278,21 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
       color: colors.mutedText,
     });
     mainY -= 10;
-    page.drawText(paymentLink, {
-      x: mainX,
-      y: mainY,
-      size: 7.5,
-      font: fontRegular,
-      color: colors.rotanaGreen,
-      link: paymentLink,
-    });
-    mainY -= 10;
+    const paymentLinkLines = wrapText(
+      paymentLink,
+      45,
+    );
+    for (const line of paymentLinkLines) {
+      page.drawText(line, {
+        x: mainX,
+        y: mainY,
+        size: 7.5,
+        font: fontRegular,
+        color: colors.rotanaGreen,
+        link: paymentLink,
+      });
+      mainY -= 10;
+    }
   }
 
   // --- 5. Notes ---
@@ -320,6 +326,16 @@ function wrapText(text: string, maxChars: number): string[] {
   let currentLine = "";
   const words = text.split(" ");
   for (const word of words) {
+    if (word.length > maxChars) {
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = "";
+      }
+      for (let index = 0; index < word.length; index += maxChars) {
+        lines.push(word.slice(index, index + maxChars));
+      }
+      continue;
+    }
     if ((currentLine + word).length <= maxChars) {
       currentLine += (currentLine ? " " : "") + word;
     } else {
