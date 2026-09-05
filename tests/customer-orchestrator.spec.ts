@@ -35,7 +35,11 @@ type MockData = {
 };
 
 class QueryBuilder {
-  private filters: Array<{ column: string; value: unknown }> = [];
+  private filters: Array<{
+    column: string;
+    value: unknown;
+    operator: "eq" | "in";
+  }> = [];
   private orderBy: { column: string; ascending: boolean } | null = null;
 
   constructor(
@@ -49,7 +53,7 @@ class QueryBuilder {
   }
 
   eq(column: string, value: unknown) {
-    this.filters.push({ column, value });
+    this.filters.push({ column, value, operator: "eq" });
     this.mock.filters.push({ table: this.table, column, value });
     return this;
   }
@@ -59,7 +63,9 @@ class QueryBuilder {
     return this;
   }
 
-  in() {
+  in(column: string, values: unknown[]) {
+    this.filters.push({ column, value: values, operator: "in" });
+    this.mock.filters.push({ table: this.table, column, value: values });
     return this;
   }
 
@@ -103,11 +109,20 @@ class MockSupabase {
 
   resolveRows(
     table: string,
-    filters: Array<{ column: string; value: unknown }>,
+    filters: Array<{
+      column: string;
+      value: unknown;
+      operator: "eq" | "in";
+    }>,
     orderBy: { column: string; ascending: boolean } | null,
   ) {
     const rows = [...(this.data[table as keyof MockData] ?? [])].filter((row) =>
-      filters.every(({ column, value }) => row[column] === value),
+      filters.every(({ column, value, operator }) => {
+        if (operator === "in") {
+          return Array.isArray(value) && value.includes(row[column]);
+        }
+        return row[column] === value;
+      }),
     );
 
     if (!orderBy) {
@@ -120,6 +135,16 @@ class MockSupabase {
       if (a === b) return 0;
       if (a == null) return 1;
       if (b == null) return -1;
+      if (typeof a === "number" && typeof b === "number") {
+        return orderBy.ascending ? a - b : b - a;
+      }
+
+      const timeA = new Date(String(a)).getTime();
+      const timeB = new Date(String(b)).getTime();
+      if (Number.isFinite(timeA) && Number.isFinite(timeB)) {
+        return orderBy.ascending ? timeA - timeB : timeB - timeA;
+      }
+
       return orderBy.ascending
         ? String(a).localeCompare(String(b))
         : String(b).localeCompare(String(a));
