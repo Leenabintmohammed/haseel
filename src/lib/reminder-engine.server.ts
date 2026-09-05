@@ -397,7 +397,7 @@ export async function processReminderEngineForOwner(args: {
       return (data as ReminderSettings | null) ?? null;
     },
     async listOverdueInvoices(ownerId, localDate) {
-      const nonReceivableCsv = `(${NON_RECEIVABLE.join(",")})`;
+      const nonReceivableCsv = `(${NON_RECEIVABLE.map((status) => `"${status.replace(/"/g, '\\"')}"`).join(",")})`;
       const { data, error } = await args.supabase
         .from("invoices")
         .select(

@@ -158,6 +158,16 @@ describe("reminder engine processing", () => {
     expect(inserted).toHaveLength(0);
   });
 
+  it("waits until configured reminder_time in owner timezone", async () => {
+    const { deps, inserted } = makeDeps({
+      settings: { timezone: "UTC", reminder_time: "14:00" },
+    });
+    const result = await runReminderEngineForOwner("owner-a", deps, now);
+    expect(result.waiting_for_time_window).toBe(true);
+    expect(result.sent).toBe(0);
+    expect(inserted).toHaveLength(0);
+  });
+
   it("maintains tenant isolation", async () => {
     const { deps, inserted } = makeDeps({
       invoices: [makeInvoice({ owner_id: "owner-b" })],

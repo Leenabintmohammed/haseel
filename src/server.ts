@@ -14,6 +14,10 @@ type WorkerEnv = {
   SUPABASE_SERVICE_ROLE_KEY?: string;
 };
 
+type WorkerExecutionContext = {
+  waitUntil(promise: Promise<unknown>): void;
+};
+
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
 async function getServerEntry(): Promise<ServerEntry> {
@@ -65,26 +69,30 @@ export default {
       });
     }
   },
-  async scheduled(_event: unknown, env: WorkerEnv) {
+  async scheduled(_event: unknown, env: WorkerEnv, ctx: WorkerExecutionContext) {
     if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
       console.error("[Cron] Missing Supabase credentials");
       return;
     }
 
-    try {
-      const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-      const result = await processFinanceForAllOwners({ supabase });
-      if (!result.success) {
-        console.error("[Cron] Finance processing failed", result);
-      } else {
-        console.log("[Cron] Finance processing completed", {
-          total_owners: result.total_owners,
-          processed: result.processed,
-          failed: result.failed,
-        });
-      }
-    } catch (error) {
-      console.error("[Cron] Unexpected finance processing error", error);
-    }
+    ctx.waitUntil(
+      (async () => {
+        try {
+          const supabase = createClient(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!);
+          const result = await processFinanceForAllOwners({ supabase });
+          if (!result.success) {
+            console.error("[Cron] Finance processing failed", result);
+          } else {
+            console.log("[Cron] Finance processing completed", {
+              total_owners: result.total_owners,
+              processed: result.processed,
+              failed: result.failed,
+            });
+          }
+        } catch (error) {
+          console.error("[Cron] Unexpected finance processing error", error);
+        }
+      })(),
+    );
   },
 };
