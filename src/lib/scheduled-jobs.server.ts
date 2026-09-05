@@ -16,6 +16,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { refreshOverdueInvoices, syncNotifications } from "./finance.server";
+import { processReminderEngineForOwner } from "./reminder-engine.server";
 
 export type ScheduledJobContext = {
   supabase: SupabaseClient;
@@ -35,10 +36,17 @@ export async function processFinanceForOwner(ctx: ScheduledJobContext, ownerId: 
     // Sync notifications (idempotent via dedupe_key UNIQUE constraint)
     await syncNotifications({ supabase: ctx.supabase, userId: ownerId });
 
+    // Send deterministic WhatsApp reminders (idempotent per owner/invoice/day rules)
+    const reminders = await processReminderEngineForOwner({
+      supabase: ctx.supabase,
+      ownerId,
+    });
+
     return {
       success: true,
       owner_id: ownerId,
       invoices_transitioned: overdue.transitioned,
+      reminders,
       timestamp: new Date().toISOString(),
     };
   } catch (error) {
