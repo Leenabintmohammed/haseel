@@ -59,6 +59,8 @@ export type ReminderInsert = {
   days_overdue: number;
 };
 
+const NON_RECEIVABLE_SET = new Set(NON_RECEIVABLE);
+
 export type ReminderEngineResult = {
   owner_id: string;
   sent: number;
@@ -216,7 +218,7 @@ export function buildReminderMessage(input: {
 }
 
 function invoiceCollectible(invoice: ReminderInvoice): boolean {
-  if (NON_RECEIVABLE.includes(invoice.status)) {
+  if (NON_RECEIVABLE_SET.has(invoice.status)) {
     return false;
   }
   return asAmount(invoice.remaining_balance) > 0;
@@ -382,38 +384,48 @@ export async function processReminderEngineForOwner(args: {
 }): Promise<ReminderEngineResult> {
   const deps: ReminderEngineDependencies = {
     async getReminderSettings(ownerId) {
-      const { data } = await args.supabase
+      const { data, error } = await args.supabase
         .from("reminder_settings")
         .select(
           "enabled,daily_enabled,reminder_time,timezone,friendly_start_day,friendly_end_day,firm_start_day,firm_end_day,serious_start_day",
         )
         .eq("owner_id", ownerId)
         .maybeSingle();
+      if (error) {
+        throw new Error(`Failed to load reminder settings for owner ${ownerId}: ${error.message}`);
+      }
       return (data as ReminderSettings | null) ?? null;
     },
     async listOverdueInvoices(ownerId, localDate) {
-      const { data } = await args.supabase
+      const nonReceivableCsv = `(${NON_RECEIVABLE.join(",")})`;
+      const { data, error } = await args.supabase
         .from("invoices")
         .select(
           "id,owner_id,client_id,invoice_number,due_date,status,remaining_balance,currency,payment_link,clients(name,phone)",
         )
         .eq("owner_id", ownerId)
-        .not("status", "in", "(paid,cancelled,draft)")
+        .not("status", "in", nonReceivableCsv)
         .lt("due_date", localDate);
+      if (error) {
+        throw new Error(`Failed to load overdue invoices for owner ${ownerId}: ${error.message}`);
+      }
       return (data as ReminderInvoice[] | null) ?? [];
     },
     async getBusinessPaymentSettings(ownerId) {
-      const { data } = await args.supabase
+      const { data, error } = await args.supabase
         .from("business_payment_settings")
         .select("bank_name,account_name,account_number,iban,swift_bic,payment_instructions")
         .eq("owner_id", ownerId)
         .maybeSingle();
+      if (error) {
+        throw new Error(`Failed to load business payment settings for owner ${ownerId}: ${error.message}`);
+      }
       return (data as BusinessPaymentSettings | null) ?? null;
     },
     async listRecentlySentReminders(ownerId, invoiceIds) {
       if (!invoiceIds.length) return [];
       const since = new Date((args.now ?? new Date()).getTime() - 14 * 24 * 60 * 60 * 1000).toISOString();
-      const { data } = await args.supabase
+      const { data, error } = await args.supabase
         .from("reminders")
         .select("invoice_id,sent_at")
         .eq("owner_id", ownerId)
@@ -421,10 +433,16 @@ export async function processReminderEngineForOwner(args: {
         .eq("status", "sent")
         .in("invoice_id", invoiceIds)
         .gte("sent_at", since);
+      if (error) {
+        throw new Error(`Failed to load recent reminders for owner ${ownerId}: ${error.message}`);
+      }
       return (data as SentReminder[] | null) ?? [];
     },
     async insertReminder(row) {
-      await args.supabase.from("reminders").insert(row);
+      const { error } = await args.supabase.from("reminders").insert(row);
+      if (error) {
+        throw new Error(`Failed to persist reminder for invoice ${row.invoice_id}: ${error.message}`);
+      }
     },
     async sendWhatsApp(input) {
       const result = await sendMessage(input);

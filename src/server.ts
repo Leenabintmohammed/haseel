@@ -71,16 +71,20 @@ export default {
       return;
     }
 
-    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-    const result = await processFinanceForAllOwners({ supabase });
-    if (!result.success) {
-      console.error("[Cron] Finance processing failed", result);
-    } else {
-      console.log("[Cron] Finance processing completed", {
-        total_owners: result.total_owners,
-        processed: result.processed,
-        failed: result.failed,
-      });
+    try {
+      const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+      const result = await processFinanceForAllOwners({ supabase });
+      if (!result.success) {
+        console.error("[Cron] Finance processing failed", result);
+      } else {
+        console.log("[Cron] Finance processing completed", {
+          total_owners: result.total_owners,
+          processed: result.processed,
+          failed: result.failed,
+        });
+      }
+    } catch (error) {
+      console.error("[Cron] Unexpected finance processing error", error);
     }
   },
 };
