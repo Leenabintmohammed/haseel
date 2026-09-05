@@ -22,6 +22,7 @@ import {
   type RiskLevel,
 } from "./finance-core";
 import { fail, isFailure, type DuelyFailure } from "./finance-errors";
+import { fulfillPaymentPromise } from "./payment-promise.server";
 
 export type FinCtx = { supabase: SupabaseClient; userId: string; actor?: "ai" | "human" | "system" };
 
@@ -221,6 +222,13 @@ export async function recalcInvoice(ctx: FinCtx, invoiceId: string) {
     .eq("id", invoiceId)
     .select("*")
     .single();
+  if (updated && round2(toNumber(updated.remaining_balance)) <= 0) {
+    await fulfillPaymentPromise({
+      supabase: ctx.supabase,
+      ownerId: ctx.userId,
+      invoiceId,
+    });
+  }
   return updated;
 }
 
