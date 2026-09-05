@@ -157,7 +157,14 @@ function buildOutstandingReply(
       : "I couldn't verify any invoices for your account right now.";
   }
 
-  return buildOutstandingTotals(invoices)
+  const totals = buildOutstandingTotals(invoices);
+  if (totals.length === 0) {
+    return locale === "ar"
+      ? "لا يوجد أي مبلغ مستحق حالياً."
+      : "There is no outstanding amount currently.";
+  }
+
+  return totals
     .map(({ currency, outstanding }) =>
       locale === "ar"
         ? `${currency} ${formatPlainAmount(outstanding, locale)} مستحق`
