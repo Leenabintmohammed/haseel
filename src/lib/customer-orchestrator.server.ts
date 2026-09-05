@@ -941,38 +941,70 @@ async function handlePaymentPlanRequest(
   reply: string | null;
 }> {
   const normalized =
-    normalizeMessage(
-      input.message,
-    );
+    normalizeMessage(input.message);
 
-  const isFollowUpToInstallmentQuestion =
-    Boolean(
-      input.previousAssistantMessage &&
-        isPaymentPlanInstallmentQuestion(
-          input.previousAssistantMessage,
-        ),
-    );
-
-  let installmentCount =
+  /*
+   * Detect whether the customer is replying to our
+   * previous payment-plan installment question.
+   *
+   * We intentionally support both:
+   *   "4"
+   *   "4 installments"
+   *   "4 payments"
+   *
+   * and Arabic equivalents.
+   */
+  const installmentCount =
     extractPaymentPlanInstallmentCount(
       normalized,
+    ) ??
+    extractStandaloneInstallmentCount(
+      normalized,
     );
 
-  if (
-    installmentCount === null &&
-    isFollowUpToInstallmentQuestion
-  ) {
-    installmentCount =
-      extractStandaloneInstallmentCount(
-        normalized,
-      );
-  }
+  const isInstallmentFollowUp =
+    input.previousAssistantMessage
+      ? isPaymentPlanInstallmentQuestion(
+          input.previousAssistantMessage,
+        )
+      : false;
 
-  if (
-    !isFollowUpToInstallmentQuestion &&
-    !hasPaymentPlanKeyword(
+  /*
+   * A standalone installment count should ONLY be treated
+   * as a payment-plan continuation when our previous message
+   * asked for the number of installments.
+   *
+   * Example:
+   *
+   * Assistant: How many installments would you like?
+   * Customer: 4
+   *
+   * This must continue the payment-plan flow.
+   */
+  const isPaymentPlanContinuation =
+    isInstallmentFollowUp &&
+    extractStandaloneInstallmentCount(
       normalized,
-    )
+    ) !== null;
+
+  /*
+   * Normal new payment-plan request.
+   */
+  const isNewPaymentPlanRequest =
+    hasPaymentPlanKeyword(
+      normalized,
+    ) &&
+    hasExplicitPaymentPlanRequest(
+      normalized,
+    );
+
+  /*
+   * Ignore an isolated number when it is NOT part of
+   * an active payment-plan conversation.
+   */
+  if (
+    !isPaymentPlanContinuation &&
+    !isNewPaymentPlanRequest
   ) {
     return {
       handled: false,
@@ -980,18 +1012,10 @@ async function handlePaymentPlanRequest(
     };
   }
 
-  if (
-    !isFollowUpToInstallmentQuestion &&
-    !hasExplicitPaymentPlanRequest(
-      normalized,
-    )
-  ) {
-    return {
-      handled: false,
-      reply: null,
-    };
-  }
-
+  /*
+   * If this is a new request without an installment count,
+   * ask the customer for the number.
+   */
   if (
     installmentCount === null
   ) {
@@ -1011,7 +1035,8 @@ async function handlePaymentPlanRequest(
     );
 
   if (
-    invoiceMatch.kind === "none"
+    invoiceMatch.kind ===
+    "none"
   ) {
     return {
       handled: true,
@@ -1126,6 +1151,7 @@ async function handlePaymentPlanRequest(
     };
   }
 }
+
 
 /* -------------------------------------------------------------------------- */
 /* Discount Request                                                           */
@@ -2062,6 +2088,13 @@ export async function runCustomerOrchestrator(
           item.role ===
           "assistant",
       )?.message ?? null;
+console.log(
+  "[Customer AI] Payment plan state",
+  {
+    currentMessage: message,
+    previousAssistantMessage,
+  },
+);
 
   await supabase
     .from("ai_conversations")
