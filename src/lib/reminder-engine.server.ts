@@ -1,6 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NON_RECEIVABLE, daysBetween } from "./finance-core";
 import { sendMessage } from "./messaging/messaging.server";
+import {
+  breakPaymentPromise,
+  fulfillPaymentPromise,
+  getActivePaymentPromise,
+  type PaymentPromiseRow,
+} from "./payment-promise.server";
 
 export type ReminderType = "friendly" | "firm" | "serious";
 
@@ -83,6 +89,9 @@ export type ReminderEngineDependencies = {
   getReminderSettings(ownerId: string): Promise<ReminderSettings | null>;
   listOverdueInvoices(ownerId: string, localDate: string): Promise<ReminderInvoice[]>;
   getBusinessPaymentSettings(ownerId: string): Promise<BusinessPaymentSettings | null>;
+  getActivePaymentPromise(ownerId: string, invoiceId: string): Promise<PaymentPromiseRow | null>;
+  breakPaymentPromise(ownerId: string, invoiceId: string, resolvedAt: string): Promise<PaymentPromiseRow | null>;
+  fulfillPaymentPromise(ownerId: string, invoiceId: string, resolvedAt: string): Promise<PaymentPromiseRow | null>;
   claimReminderAttempt(
     row: ReminderClaimInput,
   ): Promise<{ claimed: boolean; existingStatus: string | null }>;
@@ -212,6 +221,10 @@ export function buildReminderMessage(input: {
   reminderType: ReminderType;
   paymentLink: string | null;
   paymentSettings: BusinessPaymentSettings | null;
+  paymentPromise?: {
+    promiseDate: string;
+    status: "due_today" | "broken";
+  } | null;
 }): string {
   const greeting = `Hi ${input.customerName || "there"},`;
   const amountText = `${input.currency} ${input.amount.toLocaleString()}`;
@@ -220,8 +233,22 @@ export function buildReminderMessage(input: {
     firm: `This is a reminder that invoice ${input.invoiceNumber} (${amountText}) is now ${input.daysOverdue} day(s) overdue (due ${input.dueDate}).`,
     serious: `Invoice ${input.invoiceNumber} (${amountText}) is ${input.daysOverdue} day(s) overdue (due ${input.dueDate}). Please arrange payment as soon as possible.`,
   };
+  const promiseIntro =
+    input.paymentPromise?.status === "due_today"
+      ? `The payment you promised for invoice ${input.invoiceNumber} is due today, but we have not yet recorded the payment.`
+      : input.paymentPromise?.status === "broken"
+        ? `The payment you promised for invoice ${input.invoiceNumber} was due on ${new Intl.DateTimeFormat("en-US", {
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+            timeZone: "UTC",
+          }).format(new Date(`${input.paymentPromise.promiseDate}T00:00:00.000Z`))}, but we have not yet recorded the payment.`
+        : null;
   const paymentLines = paymentSection(input.paymentLink, input.paymentSettings);
-  const lines = [greeting, "", introByType[input.reminderType]];
+  const lines = [greeting, "", promiseIntro ?? introByType[input.reminderType]];
+  if (promiseIntro) {
+    lines.push("", "Please arrange payment as soon as possible.");
+  }
   if (paymentLines.length) {
     lines.push("", ...paymentLines);
   }
@@ -315,6 +342,35 @@ export async function runReminderEngineForOwner(
       continue;
     }
 
+    const activePromise = await deps.getActivePaymentPromise(ownerId, invoice.id);
+    let paymentPromiseContext: { promiseDate: string; status: "due_today" | "broken" } | null = null;
+    if (activePromise) {
+      if (activePromise.promise_date > localDate) {
+        skipped++;
+        continue;
+      }
+
+      if (asAmount(invoice.remaining_balance) <= 0) {
+        await deps.fulfillPaymentPromise(ownerId, invoice.id, scheduledAt);
+        skipped++;
+        continue;
+      }
+
+      if (activePromise.promise_date === localDate) {
+        await deps.breakPaymentPromise(ownerId, invoice.id, scheduledAt);
+        paymentPromiseContext = {
+          promiseDate: activePromise.promise_date,
+          status: "due_today",
+        };
+      } else {
+        await deps.breakPaymentPromise(ownerId, invoice.id, scheduledAt);
+        paymentPromiseContext = {
+          promiseDate: activePromise.promise_date,
+          status: "broken",
+        };
+      }
+    }
+
     const message = buildReminderMessage({
       customerName: invoice.clients?.name?.trim() || "there",
       invoiceNumber: invoice.invoice_number,
@@ -325,6 +381,7 @@ export async function runReminderEngineForOwner(
       reminderType,
       paymentLink: invoice.payment_link,
       paymentSettings,
+      paymentPromise: paymentPromiseContext,
     });
     const slotId = await makeReminderSlotId(ownerId, invoice.id, localDate);
     const claim = await deps.claimReminderAttempt({
@@ -427,6 +484,29 @@ export async function processReminderEngineForOwner(args: {
         throw new Error(`Failed to load business payment settings for owner ${ownerId}: ${error.message}`);
       }
       return (data as BusinessPaymentSettings | null) ?? null;
+    },
+    async getActivePaymentPromise(ownerId, invoiceId) {
+      return getActivePaymentPromise({
+        supabase: args.supabase,
+        ownerId,
+        invoiceId,
+      });
+    },
+    async breakPaymentPromise(ownerId, invoiceId, resolvedAt) {
+      return breakPaymentPromise({
+        supabase: args.supabase,
+        ownerId,
+        invoiceId,
+        resolvedAt,
+      });
+    },
+    async fulfillPaymentPromise(ownerId, invoiceId, resolvedAt) {
+      return fulfillPaymentPromise({
+        supabase: args.supabase,
+        ownerId,
+        invoiceId,
+        resolvedAt,
+      });
     },
     async claimReminderAttempt(row) {
       const claimStartedAt = new Date().toISOString();

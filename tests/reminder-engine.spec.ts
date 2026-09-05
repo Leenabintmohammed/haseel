@@ -11,6 +11,7 @@ import {
   type ReminderInvoice,
   type ReminderSettings,
 } from "../src/lib/reminder-engine.server";
+import type { PaymentPromiseRow } from "../src/lib/payment-promise.server";
 
 function makeInvoice(overrides: Partial<ReminderInvoice> = {}): ReminderInvoice {
   return {
@@ -33,11 +34,13 @@ function makeDeps(args: {
   invoices?: ReminderInvoice[];
   paymentSettings?: BusinessPaymentSettings | null;
   sendSuccess?: boolean;
+  paymentPromises?: PaymentPromiseRow[];
 }): {
   deps: ReminderEngineDependencies;
   getReminderRows: () => Array<
     ReminderClaimInput & { status: string; sent_at: string | null; processing_started_at: string | null }
   >;
+  getPaymentPromises: () => PaymentPromiseRow[];
   setReminderRowOwner: (slotId: string, ownerId: string) => void;
   setProcessingStartedAt: (slotId: string, processingStartedAt: string | null) => void;
   sentBodies: string[];
@@ -52,8 +55,10 @@ function makeDeps(args: {
   const invoices = args.invoices ?? [makeInvoice()];
   const paymentSettings = args.paymentSettings ?? null;
   const sendSuccess = args.sendSuccess ?? true;
+  const paymentPromises = new Map((args.paymentPromises ?? []).map((promise) => [promise.id, promise]));
   return {
     getReminderRows: () => Array.from(reminderRows.values()),
+    getPaymentPromises: () => Array.from(paymentPromises.values()),
     setReminderRowOwner: (slotId, ownerId) => {
       const current = reminderRows.get(slotId);
       if (!current) {
@@ -78,6 +83,44 @@ function makeDeps(args: {
       },
       async getBusinessPaymentSettings() {
         return paymentSettings;
+      },
+      async getActivePaymentPromise(ownerId, invoiceId) {
+        return (
+          Array.from(paymentPromises.values()).find(
+            (promise) =>
+              promise.owner_id === ownerId &&
+              promise.invoice_id === invoiceId &&
+              promise.status === "active",
+          ) ?? null
+        );
+      },
+      async breakPaymentPromise(ownerId, invoiceId, resolvedAt) {
+        const promise = Array.from(paymentPromises.values()).find(
+          (item) =>
+            item.owner_id === ownerId &&
+            item.invoice_id === invoiceId &&
+            item.status === "active",
+        );
+        if (!promise) {
+          return null;
+        }
+        const updated = { ...promise, status: "broken" as const, resolved_at: resolvedAt };
+        paymentPromises.set(updated.id, updated);
+        return updated;
+      },
+      async fulfillPaymentPromise(ownerId, invoiceId, resolvedAt) {
+        const promise = Array.from(paymentPromises.values()).find(
+          (item) =>
+            item.owner_id === ownerId &&
+            item.invoice_id === invoiceId &&
+            item.status === "active",
+        );
+        if (!promise) {
+          return null;
+        }
+        const updated = { ...promise, status: "fulfilled" as const, resolved_at: resolvedAt };
+        paymentPromises.set(updated.id, updated);
+        return updated;
       },
       async claimReminderAttempt(row) {
         const existing = reminderRows.get(row.slot_id);
@@ -238,6 +281,76 @@ describe("reminder engine processing", () => {
     expect(result.sent).toBe(0);
     expect(result.skipped).toBe(1);
     expect(getReminderRows()).toHaveLength(0);
+  });
+
+  it("suppresses escalation while a future payment promise is active", async () => {
+    const { deps, getReminderRows, sentBodies } = makeDeps({
+      paymentPromises: [
+        {
+          id: "promise-1",
+          owner_id: "owner-a",
+          invoice_id: "inv-1",
+          client_id: "client-1",
+          promise_date: "2026-09-07",
+          status: "active",
+          customer_message: "I will pay tomorrow",
+          created_at: "2026-09-05T09:00:00.000Z",
+          resolved_at: null,
+        },
+      ],
+    });
+
+    const result = await runReminderEngineForOwner("owner-a", deps, now);
+    expect(result.sent).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(getReminderRows()).toHaveLength(0);
+    expect(sentBodies).toHaveLength(0);
+  });
+
+  it("marks same-day unpaid promises broken and resumes reminders", async () => {
+    const { deps, getPaymentPromises, sentBodies } = makeDeps({
+      paymentPromises: [
+        {
+          id: "promise-2",
+          owner_id: "owner-a",
+          invoice_id: "inv-1",
+          client_id: "client-1",
+          promise_date: "2026-09-05",
+          status: "active",
+          customer_message: "I will pay on Friday",
+          created_at: "2026-09-04T09:00:00.000Z",
+          resolved_at: null,
+        },
+      ],
+    });
+
+    const result = await runReminderEngineForOwner("owner-a", deps, now);
+    expect(result.sent).toBe(1);
+    expect(getPaymentPromises()[0]?.status).toBe("broken");
+    expect(sentBodies[0]).toContain("promised for invoice INV-001 is due today");
+  });
+
+  it("keeps overdue broken promises in the normal reminder flow with acknowledgment", async () => {
+    const { deps, getPaymentPromises, sentBodies } = makeDeps({
+      paymentPromises: [
+        {
+          id: "promise-3",
+          owner_id: "owner-a",
+          invoice_id: "inv-1",
+          client_id: "client-1",
+          promise_date: "2026-09-04",
+          status: "active",
+          customer_message: "I will pay tomorrow",
+          created_at: "2026-09-03T09:00:00.000Z",
+          resolved_at: null,
+        },
+      ],
+    });
+
+    const result = await runReminderEngineForOwner("owner-a", deps, now);
+    expect(result.sent).toBe(1);
+    expect(getPaymentPromises()[0]?.status).toBe("broken");
+    expect(sentBodies[0]).toContain("was due on September 4, 2026");
   });
 
   it("clears processing_started_at after failed finalization", async () => {

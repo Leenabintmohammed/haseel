@@ -6,6 +6,13 @@ import {
   getDuelyModelId,
   hasAiProvider,
 } from "./ai-provider.server";
+import {
+  createPaymentPromise,
+  detectPaymentPromiseIntent,
+  findPromiseInvoiceMatch,
+  formatPaymentPromiseDate,
+  getOwnerTimezone,
+} from "./payment-promise.server";
 
 type CustomerOrchestratorArgs = {
   supabase: SupabaseClient;
@@ -82,6 +89,46 @@ function formatPlainAmount(amount: number, locale: "ar" | "en"): string {
   return amount.toLocaleString(locale === "ar" ? "ar-AE" : "en-AE", {
     maximumFractionDigits: 2,
   });
+}
+
+function buildPaymentPromiseReply(input: {
+  locale: "ar" | "en";
+  invoiceNumber: string;
+  promiseDate: string;
+}): string {
+  const dateText = formatPaymentPromiseDate(input.promiseDate, input.locale);
+  return input.locale === "ar"
+    ? `تم تسجيل تعهّدك بسداد الفاتورة ${input.invoiceNumber} في ${dateText}.`
+    : `Understood. I've recorded your promise to pay invoice ${input.invoiceNumber} on ${dateText}.`;
+}
+
+function buildExistingPaymentPromiseReply(input: {
+  locale: "ar" | "en";
+  invoiceNumber: string;
+  promiseDate: string;
+}): string {
+  const dateText = formatPaymentPromiseDate(input.promiseDate, input.locale);
+  return input.locale === "ar"
+    ? `يوجد بالفعل تعهّد مسجل لهذه الفاتورة ${input.invoiceNumber} بتاريخ ${dateText}.`
+    : `There is already a recorded payment promise for invoice ${input.invoiceNumber} on ${dateText}.`;
+}
+
+function buildPromiseInvoiceClarificationReply(
+  invoices: CustomerInvoice[],
+  locale: "ar" | "en",
+): string {
+  const invoiceList = invoices
+    .map((invoice) => invoice.invoice_number?.trim() || invoice.id)
+    .join(locale === "ar" ? "، " : ", ");
+  return locale === "ar"
+    ? `لديك أكثر من فاتورة غير مسددة. من فضلك حدّد أي فاتورة تقصد: ${invoiceList}.`
+    : `You have more than one unpaid invoice. Please tell me which invoice you mean: ${invoiceList}.`;
+}
+
+function buildPromiseInvoiceUnavailableReply(locale: "ar" | "en"): string {
+  return locale === "ar"
+    ? "لا أستطيع تسجيل تعهّد بالدفع لأنني لم أجد فاتورة غير مسددة مرتبطة بحسابك."
+    : "I couldn't record a payment promise because I couldn't find an unpaid invoice for your account.";
 }
 
 function buildOutstandingTotals(invoices: CustomerInvoice[]): OutstandingTotal[] {
@@ -422,6 +469,7 @@ export async function runCustomerOrchestrator(
     (paymentSettings as BusinessPaymentSettings | null | undefined) ?? null;
   const locale: "ar" | "en" =
     isArabicText(message) || client.preferred_language === "ar" ? "ar" : "en";
+  const ownerTimezone = await getOwnerTimezone(supabase, ownerId);
 
   const context = {
     customer: {
@@ -509,7 +557,78 @@ export async function runCustomerOrchestrator(
     locale,
   });
 
-  if (directReply) {
+  const promiseIntent = directReply
+    ? { kind: "none" as const, locale }
+    : detectPaymentPromiseIntent(message, {
+        now: new Date(),
+        timezone: ownerTimezone,
+      });
+  if (promiseIntent.kind === "confirmed") {
+    const invoiceMatch = findPromiseInvoiceMatch(
+      message,
+      customerInvoices.map((invoice) => ({
+        id: invoice.id,
+        owner_id: ownerId,
+        client_id: clientId,
+        invoice_number: invoice.invoice_number?.trim() || invoice.id,
+        status: invoice.status ?? "sent",
+        remaining_balance: invoice.remaining_balance,
+      })),
+    );
+
+    if (invoiceMatch.kind === "ambiguous") {
+      reply = buildPromiseInvoiceClarificationReply(
+        invoiceMatch.invoices.map((invoice) =>
+          customerInvoices.find((item) => item.id === invoice.id) ?? {
+            id: invoice.id,
+            invoice_number: invoice.invoice_number,
+            amount: null,
+            currency: null,
+            status: invoice.status,
+            due_date: null,
+            paid_date: null,
+            paid_amount: null,
+            remaining_balance: invoice.remaining_balance,
+            payment_link: null,
+          },
+        ),
+        locale,
+      );
+    } else if (invoiceMatch.kind === "none") {
+      reply = buildPromiseInvoiceUnavailableReply(locale);
+    } else {
+      const createdPromise = await createPaymentPromise({
+        supabase,
+        ownerId,
+        invoiceId: invoiceMatch.invoice.id,
+        clientId: invoiceMatch.invoice.client_id,
+        promiseDate: promiseIntent.promiseDate,
+        customerMessage: message,
+      });
+
+      if (createdPromise.created) {
+        reply = buildPaymentPromiseReply({
+          locale: promiseIntent.locale,
+          invoiceNumber:
+            createdPromise.invoice.invoice_number || createdPromise.invoice.id,
+          promiseDate: createdPromise.promise.promise_date,
+        });
+      } else if (
+        createdPromise.reason === "duplicate_active_promise" &&
+        createdPromise.existingPromise
+      ) {
+        reply = buildExistingPaymentPromiseReply({
+          locale: promiseIntent.locale,
+          invoiceNumber: invoiceMatch.invoice.invoice_number,
+          promiseDate: createdPromise.existingPromise.promise_date,
+        });
+      } else {
+        reply = buildPromiseInvoiceUnavailableReply(locale);
+      }
+    }
+  }
+
+  if (directReply && promiseIntent.kind === "none") {
     reply = directReply;
   }
 
@@ -529,7 +648,7 @@ export async function runCustomerOrchestrator(
     lastUserMessageLength: lastUserMessage?.length ?? 0,
   };
 
-  if (!directReply) {
+  if (!directReply && promiseIntent.kind === "none") {
     try {
       console.log(
         "[Customer AI] Generation request",
