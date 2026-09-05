@@ -1,4 +1,4 @@
-
+```ts
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText } from "ai";
 import {
@@ -115,27 +115,45 @@ type PaymentPlanInvoiceMatch =
       kind: "none";
     };
 
-function toFiniteNumber(value: number | null | undefined): number {
+function toFiniteNumber(
+  value: number | null | undefined,
+): number {
   return Number.isFinite(value) ? Number(value) : 0;
 }
 
-function toNullableNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") {
+function toNullableNumber(
+  value: unknown,
+): number | null {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
     return null;
   }
 
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+
+  return Number.isFinite(parsed)
+    ? parsed
+    : null;
 }
 
-function isArabicText(value: string): boolean {
+function isArabicText(
+  value: string,
+): boolean {
   return /[\u0600-\u06FF]/u.test(value);
 }
 
-function normalizeMessage(value: string): string {
+function normalizeMessage(
+  value: string,
+): string {
   return value
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}%. \s]/gu, " ")
+    .replace(
+      /[^\p{L}\p{N}%. \s]/gu,
+      " ",
+    )
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -145,7 +163,9 @@ function formatPlainAmount(
   locale: "ar" | "en",
 ): string {
   return amount.toLocaleString(
-    locale === "ar" ? "ar-AE" : "en-AE",
+    locale === "ar"
+      ? "ar-AE"
+      : "en-AE",
     {
       maximumFractionDigits: 2,
     },
@@ -156,30 +176,36 @@ function formatPlainAmount(
 /* Payment Promise                                                            */
 /* -------------------------------------------------------------------------- */
 
-function buildPaymentPromiseReply(input: {
-  locale: "ar" | "en";
-  invoiceNumber: string;
-  promiseDate: string;
-}): string {
-  const dateText = formatPaymentPromiseDate(
-    input.promiseDate,
-    input.locale,
-  );
+function buildPaymentPromiseReply(
+  input: {
+    locale: "ar" | "en";
+    invoiceNumber: string;
+    promiseDate: string;
+  },
+): string {
+  const dateText =
+    formatPaymentPromiseDate(
+      input.promiseDate,
+      input.locale,
+    );
 
   return input.locale === "ar"
     ? `تم تسجيل تعهّدك بسداد الفاتورة ${input.invoiceNumber} في ${dateText}.`
     : `Understood. I've recorded your promise to pay invoice ${input.invoiceNumber} on ${dateText}.`;
 }
 
-function buildExistingPaymentPromiseReply(input: {
-  locale: "ar" | "en";
-  invoiceNumber: string;
-  promiseDate: string;
-}): string {
-  const dateText = formatPaymentPromiseDate(
-    input.promiseDate,
-    input.locale,
-  );
+function buildExistingPaymentPromiseReply(
+  input: {
+    locale: "ar" | "en";
+    invoiceNumber: string;
+    promiseDate: string;
+  },
+): string {
+  const dateText =
+    formatPaymentPromiseDate(
+      input.promiseDate,
+      input.locale,
+    );
 
   return input.locale === "ar"
     ? `يوجد بالفعل تعهّد مسجل لهذه الفاتورة ${input.invoiceNumber} بتاريخ ${dateText}.`
@@ -190,12 +216,18 @@ function buildPromiseInvoiceClarificationReply(
   invoices: CustomerInvoice[],
   locale: "ar" | "en",
 ): string {
-  const invoiceList = invoices
-    .map(
-      (invoice) =>
-        invoice.invoice_number?.trim() || invoice.id,
-    )
-    .join(locale === "ar" ? "، " : ", ");
+  const invoiceList =
+    invoices
+      .map(
+        (invoice) =>
+          invoice.invoice_number?.trim() ||
+          invoice.id,
+      )
+      .join(
+        locale === "ar"
+          ? "، "
+          : ", ",
+      );
 
   return locale === "ar"
     ? `لديك أكثر من فاتورة غير مسددة. من فضلك حدّد أي فاتورة تقصد: ${invoiceList}.`
@@ -217,41 +249,56 @@ function buildPromiseInvoiceUnavailableReply(
 function buildOutstandingTotals(
   invoices: CustomerInvoice[],
 ): OutstandingTotal[] {
-  const totals = new Map<string, number>();
+  const totals = new Map<
+    string,
+    number
+  >();
 
   for (const invoice of invoices) {
     const currency =
-      invoice.currency?.trim() || "UNSPECIFIED";
+      invoice.currency?.trim() ||
+      "UNSPECIFIED";
 
     if (!totals.has(currency)) {
       totals.set(currency, 0);
     }
 
-    const remainingBalance = toFiniteNumber(
-      invoice.remaining_balance,
-    );
+    const remainingBalance =
+      toFiniteNumber(
+        invoice.remaining_balance,
+      );
 
     if (remainingBalance > 0) {
       totals.set(
         currency,
-        toFiniteNumber(totals.get(currency)) +
-          remainingBalance,
+        toFiniteNumber(
+          totals.get(currency),
+        ) + remainingBalance,
       );
     }
   }
 
   return [...totals.entries()]
-    .map(([currency, outstanding]) => ({
-      currency,
-      outstanding,
-    }))
+    .map(
+      ([
+        currency,
+        outstanding,
+      ]) => ({
+        currency,
+        outstanding,
+      }),
+    )
     .sort((a, b) =>
-      a.currency.localeCompare(b.currency),
+      a.currency.localeCompare(
+        b.currency,
+      ),
     );
 }
 
 function buildPaymentInstructions(
-  paymentSettings: BusinessPaymentSettings | null,
+  paymentSettings:
+    | BusinessPaymentSettings
+    | null,
 ): string[] {
   if (!paymentSettings) {
     return [];
@@ -285,7 +332,8 @@ function buildPaymentInstructions(
 function isOutstandingAmountQuestion(
   message: string,
 ): boolean {
-  const normalized = normalizeMessage(message);
+  const normalized =
+    normalizeMessage(message);
 
   return (
     /(total outstanding amount|outstanding amount|total due|amount due|balance due)/i.test(
@@ -300,7 +348,8 @@ function isOutstandingAmountQuestion(
 function isPaymentLinkQuestion(
   message: string,
 ): boolean {
-  const normalized = normalizeMessage(message);
+  const normalized =
+    normalizeMessage(message);
 
   return (
     /(payment link|pay link|payment url|link to pay|pay online)/i.test(
@@ -323,7 +372,9 @@ function buildOutstandingReply(
   }
 
   const totals =
-    buildOutstandingTotals(invoices);
+    buildOutstandingTotals(
+      invoices,
+    );
 
   if (totals.length === 0) {
     return locale === "ar"
@@ -332,49 +383,66 @@ function buildOutstandingReply(
   }
 
   return totals
-    .map(({ currency, outstanding }) =>
-      locale === "ar"
-        ? `${currency} ${formatPlainAmount(outstanding, locale)} مستحق`
-        : `${currency} ${formatPlainAmount(outstanding, locale)} outstanding`,
+    .map(
+      ({
+        currency,
+        outstanding,
+      }) =>
+        locale === "ar"
+          ? `${currency} ${formatPlainAmount(outstanding, locale)} مستحق`
+          : `${currency} ${formatPlainAmount(outstanding, locale)} outstanding`,
     )
     .join("\n");
 }
 
-function buildPaymentLinkReply(input: {
-  invoices: CustomerInvoice[];
-  paymentSettings: BusinessPaymentSettings | null;
-  locale: "ar" | "en";
-}): string {
+function buildPaymentLinkReply(
+  input: {
+    invoices: CustomerInvoice[];
+    paymentSettings:
+      | BusinessPaymentSettings
+      | null;
+    locale: "ar" | "en";
+  },
+): string {
   const {
     invoices,
     paymentSettings,
     locale,
   } = input;
 
-  const paymentLinks = invoices
-    .filter((invoice) =>
-      Boolean(invoice.payment_link?.trim()),
-    )
-    .map((invoice) => ({
-      invoiceNumber:
-        invoice.invoice_number?.trim() ||
-        invoice.id,
-      paymentLink:
-        invoice.payment_link!.trim(),
-    }));
+  const paymentLinks =
+    invoices
+      .filter((invoice) =>
+        Boolean(
+          invoice.payment_link?.trim(),
+        ),
+      )
+      .map((invoice) => ({
+        invoiceNumber:
+          invoice.invoice_number?.trim() ||
+          invoice.id,
+        paymentLink:
+          invoice.payment_link!.trim(),
+      }));
 
   if (paymentLinks.length > 0) {
     return paymentLinks
-      .map(({ invoiceNumber, paymentLink }) =>
-        locale === "ar"
-          ? `رابط الدفع للفاتورة ${invoiceNumber}: ${paymentLink}`
-          : `Payment link for invoice ${invoiceNumber}: ${paymentLink}`,
+      .map(
+        ({
+          invoiceNumber,
+          paymentLink,
+        }) =>
+          locale === "ar"
+            ? `رابط الدفع للفاتورة ${invoiceNumber}: ${paymentLink}`
+            : `Payment link for invoice ${invoiceNumber}: ${paymentLink}`,
       )
       .join("\n");
   }
 
   const instructions =
-    buildPaymentInstructions(paymentSettings);
+    buildPaymentInstructions(
+      paymentSettings,
+    );
 
   const unavailable =
     locale === "ar"
@@ -394,14 +462,20 @@ function buildPaymentLinkReply(input: {
   ].join("\n");
 }
 
-function buildDirectCustomerReply(input: {
-  message: string;
-  invoices: CustomerInvoice[];
-  paymentSettings: BusinessPaymentSettings | null;
-  locale: "ar" | "en";
-}): string | null {
+function buildDirectCustomerReply(
+  input: {
+    message: string;
+    invoices: CustomerInvoice[];
+    paymentSettings:
+      | BusinessPaymentSettings
+      | null;
+    locale: "ar" | "en";
+  },
+): string | null {
   if (
-    isOutstandingAmountQuestion(input.message)
+    isOutstandingAmountQuestion(
+      input.message,
+    )
   ) {
     return buildOutstandingReply(
       input.invoices,
@@ -409,10 +483,15 @@ function buildDirectCustomerReply(input: {
     );
   }
 
-  if (isPaymentLinkQuestion(input.message)) {
+  if (
+    isPaymentLinkQuestion(
+      input.message,
+    )
+  ) {
     return buildPaymentLinkReply({
       invoices: input.invoices,
-      paymentSettings: input.paymentSettings,
+      paymentSettings:
+        input.paymentSettings,
       locale: input.locale,
     });
   }
@@ -440,8 +519,12 @@ function hasPaymentPlanKeyword(
     /\bspread (the )?(payment|payments)\b/i.test(
       normalized,
     ) ||
-    /\bmonthly payments?\b/i.test(normalized) ||
-    /\bweekly payments?\b/i.test(normalized) ||
+    /\bmonthly payments?\b/i.test(
+      normalized,
+    ) ||
+    /\bweekly payments?\b/i.test(
+      normalized,
+    ) ||
     /تقسيط/u.test(normalized) ||
     /أقساط/u.test(normalized) ||
     /اقساط/u.test(normalized) ||
@@ -487,7 +570,8 @@ function extractPaymentPlanInstallmentCount(
   ];
 
   for (const pattern of patterns) {
-    const match = normalized.match(pattern);
+    const match =
+      normalized.match(pattern);
 
     if (!match?.[1]) {
       continue;
@@ -507,28 +591,18 @@ function extractPaymentPlanInstallmentCount(
   return null;
 }
 
-/*
- * Handles replies to our own question:
- * "How many installments would you like to request?"
- *
- * Examples:
- *   "4"
- *   "4 installments"
- *   "4 payments"
- *   "على 4 دفعات"
- *   "على 4 أقساط"
- */
 function extractStandaloneInstallmentCount(
   message: string,
 ): number | null {
-  const normalized = normalizeMessage(message);
+  const normalized =
+    normalizeMessage(message);
 
   const numericPatterns = [
-    /^(\d+)$/i,
-    /^(\d+)\s+installments?$/i,
-    /^(\d+)\s+payments?$/i,
-    /^(\d+)\s+monthly payments?$/i,
-    /^(\d+)\s+weekly payments?$/i,
+    /^(\d+)$/u,
+    /^(\d+)\s+installments?$/iu,
+    /^(\d+)\s+payments?$/iu,
+    /^(\d+)\s+monthly payments?$/iu,
+    /^(\d+)\s+weekly payments?$/iu,
     /^على\s*(\d+)\s*دفعات?$/u,
     /^على\s*(\d+)\s*دفعة$/u,
     /^على\s*(\d+)\s*أقساط?$/u,
@@ -536,7 +610,8 @@ function extractStandaloneInstallmentCount(
   ];
 
   for (const pattern of numericPatterns) {
-    const match = normalized.match(pattern);
+    const match =
+      normalized.match(pattern);
 
     if (!match?.[1]) {
       continue;
@@ -553,10 +628,10 @@ function extractStandaloneInstallmentCount(
     }
   }
 
-  /*
-   * Common Arabic number words for small installment counts.
-   */
-  const arabicNumberWords: Record<string, number> = {
+  const arabicNumberWords: Record<
+    string,
+    number
+  > = {
     اثنين: 2,
     اثنتين: 2,
     ثلاثة: 3,
@@ -577,14 +652,16 @@ function extractStandaloneInstallmentCount(
     عشرة: 10,
   };
 
-  const arabicMatch = normalized.match(
-    /^(?:على\s*)?(اثنين|اثنتين|ثلاثة|ثلاث|أربعة|اربع|أربع|خمسة|خمس|ستة|ست|سبعة|سبع|ثمانية|ثمان|تسعة|تسع|عشرة)\s*(?:دفعات?|دفعة|أقساط?|اقساط?)?$/u,
-  );
+  const arabicMatch =
+    normalized.match(
+      /^(?:على\s*)?(اثنين|اثنتين|ثلاثة|ثلاث|أربعة|اربع|أربع|خمسة|خمس|ستة|ست|سبعة|سبع|ثمانية|ثمان|تسعة|تسع|عشرة)\s*(?:دفعات?|دفعة|أقساط?|اقساط?)?$/u,
+    );
 
   if (arabicMatch?.[1]) {
     return (
-      arabicNumberWords[arabicMatch[1]] ??
-      null
+      arabicNumberWords[
+        arabicMatch[1]
+      ] ?? null
     );
   }
 
@@ -596,7 +673,9 @@ function extractPaymentPlanFrequency(
 ): PaymentPlanFrequency {
   if (
     /\bbiweekly\b/i.test(normalized) ||
-    /\bevery two weeks\b/i.test(normalized) ||
+    /\bevery two weeks\b/i.test(
+      normalized,
+    ) ||
     /كل أسبوعين/u.test(normalized) ||
     /كل اسبوعين/u.test(normalized)
   ) {
@@ -605,7 +684,9 @@ function extractPaymentPlanFrequency(
 
   if (
     /\bweekly\b/i.test(normalized) ||
-    /\bevery week\b/i.test(normalized) ||
+    /\bevery week\b/i.test(
+      normalized,
+    ) ||
     /أسبوعي/u.test(normalized) ||
     /اسبوعي/u.test(normalized) ||
     /كل أسبوع/u.test(normalized) ||
@@ -615,8 +696,12 @@ function extractPaymentPlanFrequency(
   }
 
   if (
-    /\bquarterly\b/i.test(normalized) ||
-    /\bevery three months\b/i.test(normalized) ||
+    /\bquarterly\b/i.test(
+      normalized,
+    ) ||
+    /\bevery three months\b/i.test(
+      normalized,
+    ) ||
     /ربع سنوي/u.test(normalized)
   ) {
     return "quarterly";
@@ -628,8 +713,12 @@ function extractPaymentPlanFrequency(
 function getPaymentPlanInvoiceCandidates(
   message: string,
 ): string[] {
-  const normalized = normalizeMessage(message);
-  const candidates = new Set<string>();
+  const normalized =
+    normalizeMessage(message);
+
+  const candidates = new Set<
+    string
+  >();
 
   const patterns = [
     /invoice\s*#?\s*([a-z0-9_-]+)/i,
@@ -639,7 +728,8 @@ function getPaymentPlanInvoiceCandidates(
   ];
 
   for (const pattern of patterns) {
-    const match = normalized.match(pattern);
+    const match =
+      normalized.match(pattern);
 
     if (match?.[1]) {
       candidates.add(match[1]);
@@ -653,47 +743,60 @@ function findPaymentPlanInvoiceMatch(
   message: string,
   invoices: CustomerInvoice[],
 ): PaymentPlanInvoiceMatch {
-  const eligibleInvoices = invoices.filter(
-    (invoice) =>
-      toFiniteNumber(
-        invoice.remaining_balance,
-      ) > 0 &&
-      !["paid", "cancelled", "void", "draft"].includes(
-        String(invoice.status).toLowerCase(),
-      ),
-  );
+  const eligibleInvoices =
+    invoices.filter(
+      (invoice) =>
+        toFiniteNumber(
+          invoice.remaining_balance,
+        ) > 0 &&
+        ![
+          "paid",
+          "cancelled",
+          "void",
+          "draft",
+        ].includes(
+          String(
+            invoice.status,
+          ).toLowerCase(),
+        ),
+    );
 
-  if (eligibleInvoices.length === 0) {
+  if (
+    eligibleInvoices.length === 0
+  ) {
     return {
       kind: "none",
     };
   }
 
   const candidates =
-    getPaymentPlanInvoiceCandidates(message);
+    getPaymentPlanInvoiceCandidates(
+      message,
+    );
 
   if (candidates.length > 0) {
-    const matched = eligibleInvoices.filter(
-      (invoice) => {
-        const invoiceNumber =
-          invoice.invoice_number
-            ?.trim()
-            .toLowerCase();
+    const matched =
+      eligibleInvoices.filter(
+        (invoice) => {
+          const invoiceNumber =
+            invoice.invoice_number
+              ?.trim()
+              .toLowerCase();
 
-        if (!invoiceNumber) {
-          return false;
-        }
+          if (!invoiceNumber) {
+            return false;
+          }
 
-        return candidates.some(
-          (candidate) =>
-            invoiceNumber ===
-              candidate.toLowerCase() ||
-            invoiceNumber.includes(
-              candidate.toLowerCase(),
-            ),
-        );
-      },
-    );
+          return candidates.some(
+            (candidate) =>
+              invoiceNumber ===
+                candidate.toLowerCase() ||
+              invoiceNumber.includes(
+                candidate.toLowerCase(),
+              ),
+          );
+        },
+      );
 
     if (matched.length === 1) {
       return {
@@ -714,7 +817,9 @@ function findPaymentPlanInvoiceMatch(
     };
   }
 
-  if (eligibleInvoices.length === 1) {
+  if (
+    eligibleInvoices.length === 1
+  ) {
     return {
       kind: "matched",
       invoice: eligibleInvoices[0],
@@ -731,13 +836,18 @@ function buildPaymentPlanInvoiceClarificationReply(
   invoices: CustomerInvoice[],
   locale: "ar" | "en",
 ): string {
-  const list = invoices
-    .map(
-      (invoice) =>
-        invoice.invoice_number?.trim() ||
-        invoice.id,
-    )
-    .join(locale === "ar" ? "، " : ", ");
+  const list =
+    invoices
+      .map(
+        (invoice) =>
+          invoice.invoice_number?.trim() ||
+          invoice.id,
+      )
+      .join(
+        locale === "ar"
+          ? "، "
+          : ", ",
+      );
 
   return locale === "ar"
     ? `لديك أكثر من فاتورة غير مسددة. حدّد الفاتورة التي تريد طلب خطة سداد لها: ${list}.`
@@ -787,36 +897,54 @@ function buildPaymentPlanRequestErrorReply(
 function isPaymentPlanInstallmentQuestion(
   message: string,
 ): boolean {
-  const normalized = normalizeMessage(message);
+  const normalized =
+    normalizeMessage(message);
 
   return (
-    /how many installments/i.test(normalized) ||
-    /how many payments/i.test(normalized) ||
+    /how many installments/i.test(
+      normalized,
+    ) ||
+    /how many payments/i.test(
+      normalized,
+    ) ||
     /which number of installments/i.test(
+      normalized,
+    ) ||
+    /what number of installments/i.test(
+      normalized,
+    ) ||
+    /how many payments would you like/i.test(
       normalized,
     ) ||
     /كم.*(?:دفعة|دفعات|قسط|أقساط|اقساط)/u.test(
       normalized,
     ) ||
-    /كم.*مرة.*السداد/u.test(normalized)
+    /كم.*مرة.*السداد/u.test(
+      normalized,
+    )
   );
 }
 
-async function handlePaymentPlanRequest(input: {
-  supabase: SupabaseClient;
-  ownerId: string;
-  clientId: string;
-  message: string;
-  invoices: CustomerInvoice[];
-  locale: "ar" | "en";
-  previousAssistantMessage?: string | null;
-}): Promise<{
+async function handlePaymentPlanRequest(
+  input: {
+    supabase: SupabaseClient;
+    ownerId: string;
+    clientId: string;
+    message: string;
+    invoices: CustomerInvoice[];
+    locale: "ar" | "en";
+    previousAssistantMessage?:
+      | string
+      | null;
+  },
+): Promise<{
   handled: boolean;
   reply: string | null;
 }> {
-  const normalized = normalizeMessage(
-    input.message,
-  );
+  const normalized =
+    normalizeMessage(
+      input.message,
+    );
 
   const isFollowUpToInstallmentQuestion =
     Boolean(
@@ -831,12 +959,6 @@ async function handlePaymentPlanRequest(input: {
       normalized,
     );
 
-  /*
-   * IMPORTANT:
-   * If the previous assistant message asked for
-   * the installment count, accept a bare follow-up
-   * like "4" or "4 installments".
-   */
   if (
     installmentCount === null &&
     isFollowUpToInstallmentQuestion
@@ -847,14 +969,11 @@ async function handlePaymentPlanRequest(input: {
       );
   }
 
-  /*
-   * A continuation of our own payment-plan question
-   * is a valid payment-plan flow even though the new
-   * customer message may contain no payment-plan keyword.
-   */
   if (
     !isFollowUpToInstallmentQuestion &&
-    !hasPaymentPlanKeyword(normalized)
+    !hasPaymentPlanKeyword(
+      normalized,
+    )
   ) {
     return {
       handled: false,
@@ -864,7 +983,9 @@ async function handlePaymentPlanRequest(input: {
 
   if (
     !isFollowUpToInstallmentQuestion &&
-    !hasExplicitPaymentPlanRequest(normalized)
+    !hasExplicitPaymentPlanRequest(
+      normalized,
+    )
   ) {
     return {
       handled: false,
@@ -872,7 +993,9 @@ async function handlePaymentPlanRequest(input: {
     };
   }
 
-  if (installmentCount === null) {
+  if (
+    installmentCount === null
+  ) {
     return {
       handled: true,
       reply:
@@ -888,7 +1011,9 @@ async function handlePaymentPlanRequest(input: {
       input.invoices,
     );
 
-  if (invoiceMatch.kind === "none") {
+  if (
+    invoiceMatch.kind === "none"
+  ) {
     return {
       handled: true,
       reply:
@@ -898,7 +1023,10 @@ async function handlePaymentPlanRequest(input: {
     };
   }
 
-  if (invoiceMatch.kind === "ambiguous") {
+  if (
+    invoiceMatch.kind ===
+    "ambiguous"
+  ) {
     return {
       handled: true,
       reply:
@@ -910,29 +1038,43 @@ async function handlePaymentPlanRequest(input: {
   }
 
   const frequency =
-    extractPaymentPlanFrequency(normalized);
+    extractPaymentPlanFrequency(
+      normalized,
+    );
 
   try {
-    await createPaymentPlanRequest({
-      supabase: input.supabase,
-      ownerId: input.ownerId,
-      clientId: input.clientId,
-      invoiceId: invoiceMatch.invoice.id,
-      requestedInstallmentCount:
-        installmentCount,
-      requestedFrequency: frequency,
-      reason: input.message.trim(),
-    });
+    await createPaymentPlanRequest(
+      {
+        supabase:
+          input.supabase,
+        ownerId:
+          input.ownerId,
+        clientId:
+          input.clientId,
+        invoiceId:
+          invoiceMatch.invoice.id,
+        requestedInstallmentCount:
+          installmentCount,
+        requestedFrequency:
+          frequency,
+        reason:
+          input.message.trim(),
+      },
+    );
 
     console.log(
       "[Customer AI] Payment plan request created",
       {
-        ownerId: input.ownerId,
-        clientId: input.clientId,
-        invoiceId: invoiceMatch.invoice.id,
+        ownerId:
+          input.ownerId,
+        clientId:
+          input.clientId,
+        invoiceId:
+          invoiceMatch.invoice.id,
         requestedInstallmentCount:
           installmentCount,
-        requestedFrequency: frequency,
+        requestedFrequency:
+          frequency,
       },
     );
 
@@ -965,10 +1107,14 @@ async function handlePaymentPlanRequest(input: {
     console.error(
       "[Customer AI] Payment plan request creation failed",
       {
-        ownerId: input.ownerId,
-        clientId: input.clientId,
-        invoiceId: invoiceMatch.invoice.id,
-        error: errorMessage,
+        ownerId:
+          input.ownerId,
+        clientId:
+          input.clientId,
+        invoiceId:
+          invoiceMatch.invoice.id,
+        error:
+          errorMessage,
       },
     );
 
@@ -994,7 +1140,9 @@ function hasDiscountKeyword(
     /\breduction\b/i.test(normalized) ||
     /\breduce\b/i.test(normalized) ||
     /\blower\b/i.test(normalized) ||
-    /\bdiscounted\b/i.test(normalized) ||
+    /\bdiscounted\b/i.test(
+      normalized,
+    ) ||
     /خصم/u.test(normalized) ||
     /تخفيض/u.test(normalized) ||
     /تخفيضه/u.test(normalized) ||
@@ -1029,9 +1177,14 @@ function isGenericDiscountQuestion(
 function parseDiscountIntent(
   message: string,
 ): DiscountRequestIntent {
-  const normalized = normalizeMessage(message);
+  const normalized =
+    normalizeMessage(message);
 
-  if (!hasDiscountKeyword(normalized)) {
+  if (
+    !hasDiscountKeyword(
+      normalized,
+    )
+  ) {
     return {
       isRequest: false,
       discountAmount: null,
@@ -1040,7 +1193,11 @@ function parseDiscountIntent(
     };
   }
 
-  if (isGenericDiscountQuestion(normalized)) {
+  if (
+    isGenericDiscountQuestion(
+      normalized,
+    )
+  ) {
     return {
       isRequest: false,
       discountAmount: null,
@@ -1049,7 +1206,11 @@ function parseDiscountIntent(
     };
   }
 
-  if (!hasExplicitDiscountRequest(normalized)) {
+  if (
+    !hasExplicitDiscountRequest(
+      normalized,
+    )
+  ) {
     return {
       isRequest: false,
       discountAmount: null,
@@ -1058,15 +1219,22 @@ function parseDiscountIntent(
     };
   }
 
-  let discountPercent: number | null = null;
-  let discountAmount: number | null = null;
+  let discountPercent:
+    | number
+    | null = null;
 
-  const percentMatch = normalized.match(
-    /(\d+(?:\.\d+)?)\s*%/,
-  );
+  let discountAmount:
+    | number
+    | null = null;
+
+  const percentMatch =
+    normalized.match(
+      /(\d+(?:\.\d+)?)\s*%/,
+    );
 
   if (percentMatch) {
-    discountPercent = Number(percentMatch[1]);
+    discountPercent =
+      Number(percentMatch[1]);
   }
 
   const fixedAmountMatch =
@@ -1077,16 +1245,22 @@ function parseDiscountIntent(
       /(\d+(?:\.\d+)?)\s*(?:aed|sar|usd|درهم|ريال|دولار)?\s*(?:discount|reduction|خصم|تخفيض)/i,
     );
 
-  if (fixedAmountMatch && !percentMatch) {
-    discountAmount = Number(
-      fixedAmountMatch[1],
-    );
+  if (
+    fixedAmountMatch &&
+    !percentMatch
+  ) {
+    discountAmount =
+      Number(
+        fixedAmountMatch[1],
+      );
   }
 
   if (
     discountPercent !== null &&
-    (discountPercent <= 0 ||
-      discountPercent > 100)
+    (
+      discountPercent <= 0 ||
+      discountPercent > 100
+    )
   ) {
     discountPercent = null;
   }
@@ -1109,9 +1283,11 @@ function parseDiscountIntent(
 function getInvoiceIdentifierCandidates(
   message: string,
 ): string[] {
-  const normalized = normalizeMessage(message);
+  const normalized =
+    normalizeMessage(message);
 
-  const candidates = new Set<string>();
+  const candidates =
+    new Set<string>();
 
   const patterns = [
     /invoice\s*#?\s*([a-z0-9_-]+)/i,
@@ -1121,27 +1297,32 @@ function getInvoiceIdentifierCandidates(
   ];
 
   for (const pattern of patterns) {
-    const match = normalized.match(pattern);
+    const match =
+      normalized.match(pattern);
 
     if (match?.[1]) {
       candidates.add(match[1]);
     }
   }
 
-  const tokens = normalized.split(/\s+/);
+  const tokens =
+    normalized.split(/\s+/);
 
   for (const token of tokens) {
-    const cleaned = token.replace(
-      /[^a-z0-9_-]/gi,
-      "",
-    );
+    const cleaned =
+      token.replace(
+        /[^a-z0-9_-]/gi,
+        "",
+      );
 
     if (
       cleaned.length >= 3 &&
       cleaned.length <= 32 &&
       /\d/.test(cleaned)
     ) {
-      candidates.add(cleaned);
+      candidates.add(
+        cleaned,
+      );
     }
   }
 
@@ -1152,73 +1333,95 @@ function findDiscountInvoiceMatch(
   message: string,
   invoices: CustomerInvoice[],
 ): DiscountInvoiceMatch {
-  const unpaidInvoices = invoices.filter(
-    (invoice) =>
-      toFiniteNumber(
-        invoice.remaining_balance,
-      ) > 0 &&
-      !["paid", "cancelled", "void"].includes(
-        String(invoice.status).toLowerCase(),
-      ),
-  );
+  const unpaidInvoices =
+    invoices.filter(
+      (invoice) =>
+        toFiniteNumber(
+          invoice.remaining_balance,
+        ) > 0 &&
+        ![
+          "paid",
+          "cancelled",
+          "void",
+        ].includes(
+          String(
+            invoice.status,
+          ).toLowerCase(),
+        ),
+    );
 
-  if (unpaidInvoices.length === 0) {
+  if (
+    unpaidInvoices.length === 0
+  ) {
     return {
       kind: "none",
     };
   }
 
   const candidates =
-    getInvoiceIdentifierCandidates(message);
-
-  if (candidates.length > 0) {
-    const matched = unpaidInvoices.filter(
-      (invoice) => {
-        const invoiceNumber =
-          invoice.invoice_number
-            ?.trim()
-            .toLowerCase();
-
-        if (!invoiceNumber) {
-          return false;
-        }
-
-        return candidates.some(
-          (candidate) =>
-            invoiceNumber ===
-              candidate.toLowerCase() ||
-            invoiceNumber.includes(
-              candidate.toLowerCase(),
-            ),
-        );
-      },
+    getInvoiceIdentifierCandidates(
+      message,
     );
 
-    if (matched.length === 1) {
+  if (candidates.length > 0) {
+    const matched =
+      unpaidInvoices.filter(
+        (invoice) => {
+          const invoiceNumber =
+            invoice.invoice_number
+              ?.trim()
+              .toLowerCase();
+
+          if (!invoiceNumber) {
+            return false;
+          }
+
+          return candidates.some(
+            (candidate) =>
+              invoiceNumber ===
+                candidate.toLowerCase() ||
+              invoiceNumber.includes(
+                candidate.toLowerCase(),
+              ),
+          );
+        },
+      );
+
+    if (
+      matched.length === 1
+    ) {
       return {
         kind: "matched",
-        invoice: matched[0],
+        invoice:
+          matched[0],
       };
     }
 
-    if (matched.length > 1) {
+    if (
+      matched.length > 1
+    ) {
       return {
         kind: "ambiguous",
-        invoices: matched,
+        invoices:
+          matched,
       };
     }
   }
 
-  if (unpaidInvoices.length === 1) {
+  if (
+    unpaidInvoices.length === 1
+  ) {
     return {
       kind: "matched",
-      invoice: unpaidInvoices[0],
+      invoice:
+        unpaidInvoices[0],
     };
   }
 
   return {
     kind: "ambiguous",
-    invoices: unpaidInvoices,
+    invoices:
+      unpaidInvoices,
   };
 }
 
@@ -1226,13 +1429,18 @@ function buildDiscountInvoiceClarificationReply(
   invoices: CustomerInvoice[],
   locale: "ar" | "en",
 ): string {
-  const list = invoices
-    .map(
-      (invoice) =>
-        invoice.invoice_number?.trim() ||
-        invoice.id,
-    )
-    .join(locale === "ar" ? "، " : ", ");
+  const list =
+    invoices
+      .map(
+        (invoice) =>
+          invoice.invoice_number?.trim() ||
+          invoice.id,
+      )
+      .join(
+        locale === "ar"
+          ? "، "
+          : ", ",
+      );
 
   return locale === "ar"
     ? `لديك أكثر من فاتورة غير مسددة. من فضلك حدّد الفاتورة التي تريد طلب الخصم عليها: ${list}.`
@@ -1271,20 +1479,23 @@ function buildDiscountRequestErrorReply(
     : "I couldn't create the discount request right now. Please try again or contact the business.";
 }
 
-async function handleDiscountRequest(input: {
-  supabase: SupabaseClient;
-  ownerId: string;
-  clientId: string;
-  message: string;
-  invoices: CustomerInvoice[];
-  locale: "ar" | "en";
-}): Promise<{
+async function handleDiscountRequest(
+  input: {
+    supabase: SupabaseClient;
+    ownerId: string;
+    clientId: string;
+    message: string;
+    invoices: CustomerInvoice[];
+    locale: "ar" | "en";
+  },
+): Promise<{
   handled: boolean;
   reply: string | null;
 }> {
-  const intent = parseDiscountIntent(
-    input.message,
-  );
+  const intent =
+    parseDiscountIntent(
+      input.message,
+    );
 
   if (!intent.isRequest) {
     return {
@@ -1299,16 +1510,22 @@ async function handleDiscountRequest(input: {
       input.invoices,
     );
 
-  if (invoiceMatch.kind === "none") {
+  if (
+    invoiceMatch.kind === "none"
+  ) {
     return {
       handled: true,
-      reply: buildDiscountUnavailableReply(
-        input.locale,
-      ),
+      reply:
+        buildDiscountUnavailableReply(
+          input.locale,
+        ),
     };
   }
 
-  if (invoiceMatch.kind === "ambiguous") {
+  if (
+    invoiceMatch.kind ===
+    "ambiguous"
+  ) {
     return {
       handled: true,
       reply:
@@ -1320,26 +1537,36 @@ async function handleDiscountRequest(input: {
   }
 
   try {
-    await createDiscountRequest({
-      supabase: input.supabase,
-      ownerId: input.ownerId,
-      clientId: input.clientId,
-      invoiceId: invoiceMatch.invoice.id,
-      requestedAmount:
-        invoiceMatch.invoice.amount,
-      requestedDiscountAmount:
-        intent.discountAmount,
-      requestedDiscountPercent:
-        intent.discountPercent,
-      reason: intent.reason,
-    });
+    await createDiscountRequest(
+      {
+        supabase:
+          input.supabase,
+        ownerId:
+          input.ownerId,
+        clientId:
+          input.clientId,
+        invoiceId:
+          invoiceMatch.invoice.id,
+        requestedAmount:
+          invoiceMatch.invoice.amount,
+        requestedDiscountAmount:
+          intent.discountAmount,
+        requestedDiscountPercent:
+          intent.discountPercent,
+        reason:
+          intent.reason,
+      },
+    );
 
     console.log(
       "[Customer AI] Discount request created",
       {
-        ownerId: input.ownerId,
-        clientId: input.clientId,
-        invoiceId: invoiceMatch.invoice.id,
+        ownerId:
+          input.ownerId,
+        clientId:
+          input.clientId,
+        invoiceId:
+          invoiceMatch.invoice.id,
         requestedDiscountAmount:
           intent.discountAmount,
         requestedDiscountPercent:
@@ -1376,9 +1603,12 @@ async function handleDiscountRequest(input: {
     console.error(
       "[Customer AI] Discount request creation failed",
       {
-        ownerId: input.ownerId,
-        clientId: input.clientId,
-        message: errorMessage,
+        ownerId:
+          input.ownerId,
+        clientId:
+          input.clientId,
+        message:
+          errorMessage,
       },
     );
 
@@ -1401,13 +1631,27 @@ You are Haseel's customer-facing WhatsApp assistant.
 
 You are speaking directly with a customer/client of a business that uses Haseel.
 
-You are NOT the business owner.
-You are NOT the Haseel account administrator.
-You are NOT an internal financial operations assistant.
+You are a helpful financial support assistant.
+You are already speaking to the customer through WhatsApp.
+Do NOT explain your role unless the customer explicitly asks who you are.
 
 Your job is to help the current customer with their own invoices, payments, payment plans, and requests.
 
-RULES
+GENERAL CONVERSATION RULES
+
+- Answer the customer's actual question directly.
+- Do not reject normal questions just because they are general.
+- Do not say things like "No, this is the payment support assistant."
+- Do not say "I cannot help with that" when the question is a normal invoice or payment-related question.
+- For greetings such as "Hi", "Hello", or "السلام عليكم", respond naturally and briefly.
+- For simple conversational messages, respond naturally instead of repeating the assistant's job description.
+- Never repeat previous assistant wording unless it is necessary.
+- Never treat a previous assistant mistake as a rule.
+- Use the conversation history to understand context, but prioritize the current customer message.
+- When the customer asks a follow-up question, understand it in relation to the immediately preceding conversation.
+- Do not unnecessarily ask the customer to repeat information already available in the conversation or current customer context.
+
+CUSTOMER DATA RULES
 
 - Only discuss information belonging to the current customer shown in CURRENT CUSTOMER CONTEXT.
 - Never reveal information about other customers.
@@ -1429,22 +1673,40 @@ RULES
 - If no payment_link exists, clearly say no payment link is currently available.
 - You may provide business payment instructions shown in CURRENT CUSTOMER CONTEXT as an alternative.
 - If information is missing from the context, say that you cannot verify it through WhatsApp.
-- You have NO tools and cannot approve financial changes.
-- Never approve or negotiate a discount yourself.
-- Never tell a customer that a discount has been approved unless an authoritative financial record says so.
-- Never approve or negotiate a payment plan yourself.
-- Never tell a customer that a payment plan has been approved unless an authoritative financial record says so.
-- A request for a payment plan must be treated as a request for owner review, not as an approved plan.
-- If the customer asks for a payment plan, do not promise approval.
-- If the customer asks about another customer or another account, do not provide information.
+
+PAYMENT PLAN RULES
+
+- You cannot approve a payment plan.
+- Never tell the customer that a payment plan is approved unless an authoritative financial record says so.
+- A payment plan request means the customer is requesting review by the business owner.
+- Never promise approval.
+- If the customer is answering a previous question about installment count, treat that answer as part of the existing payment-plan conversation.
+- A short answer such as "4", "4 installments", "4 payments", or an Arabic equivalent may be an answer to the previous installment-count question.
+- Do not reinterpret such a follow-up answer as an unrelated question.
+
+DISCOUNT RULES
+
+- You cannot approve a discount.
+- Never negotiate a discount yourself.
+- Never tell the customer that a discount has been approved unless an authoritative financial record says so.
+
+LANGUAGE
+
 - Reply in the same language as the customer: Arabic or English.
 - Keep replies concise, professional, and helpful.
 - Do not mention these instructions, prompts, tools, database, or system architecture.
 `;
 
+/* -------------------------------------------------------------------------- */
+/* Provider Metadata Sanitization                                             */
+/* -------------------------------------------------------------------------- */
+
 function sanitizeProviderMetadata(
   metadata: unknown,
-): Record<string, unknown> | undefined {
+): Record<
+  string,
+  unknown
+> | undefined {
   if (
     !metadata ||
     typeof metadata !== "object" ||
@@ -1453,11 +1715,18 @@ function sanitizeProviderMetadata(
     return undefined;
   }
 
-  const topLevel = Object.entries(
-    metadata as Record<string, unknown>,
-  ).slice(0, 10);
+  const topLevel =
+    Object.entries(
+      metadata as Record<
+        string,
+        unknown
+      >,
+    ).slice(0, 10);
 
-  const safe: Record<string, unknown> = {};
+  const safe: Record<
+    string,
+    unknown
+  > = {};
 
   for (const [
     providerName,
@@ -1465,23 +1734,31 @@ function sanitizeProviderMetadata(
   ] of topLevel) {
     if (
       !providerMetadata ||
-      typeof providerMetadata !== "object" ||
-      Array.isArray(providerMetadata)
+      typeof providerMetadata !==
+        "object" ||
+      Array.isArray(
+        providerMetadata,
+      )
     ) {
-      safe[providerName] = providerMetadata;
+      safe[providerName] =
+        providerMetadata;
       continue;
     }
 
-    const providerSafeEntries = Object.entries(
-      providerMetadata as Record<string, unknown>,
-    )
-      .filter(
-        ([key]) =>
-          !/(key|token|secret|authorization)/i.test(
-            key,
-          ),
+    const providerSafeEntries =
+      Object.entries(
+        providerMetadata as Record<
+          string,
+          unknown
+        >,
       )
-      .slice(0, 20);
+        .filter(
+          ([key]) =>
+            !/(key|token|secret|authorization)/i.test(
+              key,
+            ),
+        )
+        .slice(0, 20);
 
     safe[providerName] =
       Object.fromEntries(
@@ -1489,7 +1766,9 @@ function sanitizeProviderMetadata(
       );
   }
 
-  return Object.keys(safe).length > 0
+  return Object.keys(
+    safe,
+  ).length > 0
     ? safe
     : undefined;
 }
@@ -1500,7 +1779,9 @@ function sanitizeProviderMetadata(
 
 export async function runCustomerOrchestrator(
   args: CustomerOrchestratorArgs,
-): Promise<{ reply: string }> {
+): Promise<{
+  reply: string;
+}> {
   if (!hasAiProvider()) {
     return {
       reply:
@@ -1563,7 +1844,8 @@ export async function runCustomerOrchestrator(
     },
     {
       data: paymentSettings,
-      error: paymentSettingsError,
+      error:
+        paymentSettingsError,
     },
   ] = await Promise.all([
     supabase
@@ -1603,7 +1885,9 @@ export async function runCustomerOrchestrator(
       .limit(20),
 
     supabase
-      .from("business_payment_settings")
+      .from(
+        "business_payment_settings",
+      )
       .select(
         "bank_name, account_name, account_number, iban, swift_bic, payment_instructions",
       )
@@ -1632,7 +1916,9 @@ export async function runCustomerOrchestrator(
     );
   }
 
-  if (paymentSettingsError) {
+  if (
+    paymentSettingsError
+  ) {
     console.error(
       "[Customer AI] Business payment settings lookup failed",
       paymentSettingsError,
@@ -1654,9 +1940,12 @@ export async function runCustomerOrchestrator(
       | null
       | undefined) ?? null;
 
-  const locale: "ar" | "en" =
+  const locale:
+    | "ar"
+    | "en" =
     isArabicText(message) ||
-    client.preferred_language === "ar"
+    client.preferred_language ===
+      "ar"
       ? "ar"
       : "en";
 
@@ -1669,33 +1958,41 @@ export async function runCustomerOrchestrator(
   const context = {
     customer: {
       name: client.name,
-      company_name: client.company_name,
+      company_name:
+        client.company_name,
       preferred_language:
         client.preferred_language,
     },
 
-    invoices: customerInvoices,
+    invoices:
+      customerInvoices,
 
     outstanding_totals_by_currency:
       buildOutstandingTotals(
         customerInvoices,
       ),
 
-    payments: customerPayments,
+    payments:
+      customerPayments,
 
-    payment_plans: customerPlans,
+    payment_plans:
+      customerPlans,
 
-    payment_links: customerInvoices
-      .filter((invoice) =>
-        Boolean(invoice.payment_link?.trim()),
-      )
-      .map((invoice) => ({
-        invoice_id: invoice.id,
-        invoice_number:
-          invoice.invoice_number,
-        payment_link:
-          invoice.payment_link,
-      })),
+    payment_links:
+      customerInvoices
+        .filter((invoice) =>
+          Boolean(
+            invoice.payment_link?.trim(),
+          ),
+        )
+        .map((invoice) => ({
+          invoice_id:
+            invoice.id,
+          invoice_number:
+            invoice.invoice_number,
+          payment_link:
+            invoice.payment_link,
+        })),
 
     business_payment_details:
       customerPaymentSettings
@@ -1718,9 +2015,54 @@ export async function runCustomerOrchestrator(
 
   const conversationContext = {
     mode: "customer",
-    client_id: clientId,
-    customer_phone: customerPhone,
+    client_id:
+      clientId,
+    customer_phone:
+      customerPhone,
   };
+
+  /*
+   * Load conversation history BEFORE inserting the current
+   * customer message. This makes previousAssistantMessage
+   * deterministic and prevents the current message from
+   * being mistaken for the previous turn.
+   */
+  const {
+    data: historyBefore,
+    error: historyBeforeError,
+  } = await supabase
+    .from("ai_conversations")
+    .select(
+      "role, message",
+    )
+    .eq(
+      "owner_id",
+      ownerId,
+    )
+    .eq(
+      "session_id",
+      sessionId,
+    )
+    .order("created_at", {
+      ascending: false,
+    })
+    .limit(20);
+
+  if (historyBeforeError) {
+    console.error(
+      "[Customer AI] Previous history lookup failed",
+      historyBeforeError,
+    );
+  }
+
+  const previousAssistantMessage =
+    [...(historyBefore ?? [])]
+      .reverse()
+      .find(
+        (item) =>
+          item.role ===
+          "assistant",
+      )?.message ?? null;
 
   await supabase
     .from("ai_conversations")
@@ -1729,17 +2071,30 @@ export async function runCustomerOrchestrator(
       session_id: sessionId,
       role: "user",
       message,
-      context: conversationContext as never,
+      context:
+        conversationContext as never,
     });
 
+  /*
+   * Rebuild history after inserting the current
+   * user message so the AI receives the latest turn.
+   */
   const {
     data: history,
     error: historyError,
   } = await supabase
     .from("ai_conversations")
-    .select("role, message")
-    .eq("owner_id", ownerId)
-    .eq("session_id", sessionId)
+    .select(
+      "role, message",
+    )
+    .eq(
+      "owner_id",
+      ownerId,
+    )
+    .eq(
+      "session_id",
+      sessionId,
+    )
     .order("created_at", {
       ascending: true,
     })
@@ -1752,15 +2107,18 @@ export async function runCustomerOrchestrator(
     );
   }
 
-  const messages = (history ?? []).map(
-    (item) => ({
-      role:
-        item.role === "assistant"
-          ? ("assistant" as const)
-          : ("user" as const),
-      content: item.message,
-    }),
-  );
+  const messages =
+    (history ?? []).map(
+      (item) => ({
+        role:
+          item.role ===
+          "assistant"
+            ? ("assistant" as const)
+            : ("user" as const),
+        content:
+          item.message,
+      }),
+    );
 
   if (
     messages.length === 0 &&
@@ -1768,23 +2126,10 @@ export async function runCustomerOrchestrator(
   ) {
     messages.push({
       role: "user",
-      content: message.trim(),
+      content:
+        message.trim(),
     });
   }
-
-  /*
-   * Because the current user message has already been inserted
-   * into history, this finds the most recent assistant response
-   * BEFORE the current message.
-   */
-  const previousAssistantMessage =
-    [...(history ?? [])]
-      .slice(0, -1)
-      .reverse()
-      .find(
-        (item) =>
-          item.role === "assistant",
-      )?.message ?? null;
 
   let reply =
     locale === "ar"
@@ -1796,17 +2141,22 @@ export async function runCustomerOrchestrator(
   /* ---------------------------------------------------------------------- */
 
   const paymentPlanResult =
-    await handlePaymentPlanRequest({
-      supabase,
-      ownerId,
-      clientId,
-      message,
-      invoices: customerInvoices,
-      locale,
-      previousAssistantMessage,
-    });
+    await handlePaymentPlanRequest(
+      {
+        supabase,
+        ownerId,
+        clientId,
+        message,
+        invoices:
+          customerInvoices,
+        locale,
+        previousAssistantMessage,
+      },
+    );
 
-  if (paymentPlanResult.handled) {
+  if (
+    paymentPlanResult.handled
+  ) {
     reply =
       paymentPlanResult.reply ??
       (locale === "ar"
@@ -1816,15 +2166,20 @@ export async function runCustomerOrchestrator(
     await supabase
       .from("ai_conversations")
       .insert({
-        owner_id: ownerId,
-        session_id: sessionId,
+        owner_id:
+          ownerId,
+        session_id:
+          sessionId,
         role: "assistant",
-        message: reply,
+        message:
+          reply,
         context:
           conversationContext as never,
       });
 
-    return { reply };
+    return {
+      reply,
+    };
   }
 
   /* ---------------------------------------------------------------------- */
@@ -1832,16 +2187,21 @@ export async function runCustomerOrchestrator(
   /* ---------------------------------------------------------------------- */
 
   const discountResult =
-    await handleDiscountRequest({
-      supabase,
-      ownerId,
-      clientId,
-      message,
-      invoices: customerInvoices,
-      locale,
-    });
+    await handleDiscountRequest(
+      {
+        supabase,
+        ownerId,
+        clientId,
+        message,
+        invoices:
+          customerInvoices,
+        locale,
+      },
+    );
 
-  if (discountResult.handled) {
+  if (
+    discountResult.handled
+  ) {
     reply =
       discountResult.reply ??
       (locale === "ar"
@@ -1851,15 +2211,20 @@ export async function runCustomerOrchestrator(
     await supabase
       .from("ai_conversations")
       .insert({
-        owner_id: ownerId,
-        session_id: sessionId,
+        owner_id:
+          ownerId,
+        session_id:
+          sessionId,
         role: "assistant",
-        message: reply,
+        message:
+          reply,
         context:
           conversationContext as never,
       });
 
-    return { reply };
+    return {
+      reply,
+    };
   }
 
   /* ---------------------------------------------------------------------- */
@@ -1867,30 +2232,37 @@ export async function runCustomerOrchestrator(
   /* ---------------------------------------------------------------------- */
 
   const directReply =
-    buildDirectCustomerReply({
-      message,
-      invoices: customerInvoices,
-      paymentSettings:
-        customerPaymentSettings,
-      locale,
-    });
+    buildDirectCustomerReply(
+      {
+        message,
+        invoices:
+          customerInvoices,
+        paymentSettings:
+          customerPaymentSettings,
+        locale,
+      },
+    );
 
   /* ---------------------------------------------------------------------- */
   /* 4. Payment Promise                                                     */
   /* ---------------------------------------------------------------------- */
 
-  const promiseIntent = directReply
-    ? {
-        kind: "none" as const,
-        locale,
-      }
-    : detectPaymentPromiseIntent(
-        message,
-        {
-          now: new Date(),
-          timezone: ownerTimezone,
-        },
-      );
+  const promiseIntent =
+    directReply
+      ? {
+          kind:
+            "none" as const,
+          locale,
+        }
+      : detectPaymentPromiseIntent(
+          message,
+          {
+            now:
+              new Date(),
+            timezone:
+              ownerTimezone,
+          },
+        );
 
   if (
     promiseIntent.kind ===
@@ -1902,13 +2274,16 @@ export async function runCustomerOrchestrator(
         customerInvoices.map(
           (invoice) => ({
             id: invoice.id,
-            owner_id: ownerId,
-            client_id: clientId,
+            owner_id:
+              ownerId,
+            client_id:
+              clientId,
             invoice_number:
               invoice.invoice_number?.trim() ||
               invoice.id,
             status:
-              invoice.status ?? "sent",
+              invoice.status ??
+              "sent",
             remaining_balance:
               invoice.remaining_balance,
           }),
@@ -1925,27 +2300,36 @@ export async function runCustomerOrchestrator(
             (invoice) =>
               customerInvoices.find(
                 (item) =>
-                  item.id === invoice.id,
+                  item.id ===
+                  invoice.id,
               ) ?? {
-                id: invoice.id,
+                id:
+                  invoice.id,
                 invoice_number:
                   invoice.invoice_number,
-                amount: null,
-                currency: null,
+                amount:
+                  null,
+                currency:
+                  null,
                 status:
                   invoice.status,
-                due_date: null,
-                paid_date: null,
-                paid_amount: null,
+                due_date:
+                  null,
+                paid_date:
+                  null,
+                paid_amount:
+                  null,
                 remaining_balance:
                   invoice.remaining_balance,
-                payment_link: null,
+                payment_link:
+                  null,
               },
           ),
           locale,
         );
     } else if (
-      invoiceMatch.kind === "none"
+      invoiceMatch.kind ===
+      "none"
     ) {
       reply =
         buildPromiseInvoiceUnavailableReply(
@@ -1954,32 +2338,42 @@ export async function runCustomerOrchestrator(
     } else {
       try {
         const createdPromise =
-          await createPaymentPromise({
-            supabase,
-            ownerId,
-            invoiceId:
-              invoiceMatch.invoice.id,
-            clientId:
-              invoiceMatch.invoice.client_id,
-            promiseDate:
-              promiseIntent.promiseDate,
-            customerMessage:
-              message,
-          });
-
-        if (createdPromise.created) {
-          reply =
-            buildPaymentPromiseReply({
-              locale:
-                promiseIntent.locale,
-              invoiceNumber:
-                createdPromise.invoice
-                  .invoice_number ||
-                createdPromise.invoice.id,
+          await createPaymentPromise(
+            {
+              supabase,
+              ownerId,
+              invoiceId:
+                invoiceMatch.invoice.id,
+              clientId:
+                invoiceMatch.invoice.client_id,
               promiseDate:
-                createdPromise.promise
-                  .promise_date,
-            });
+                promiseIntent.promiseDate,
+              customerMessage:
+                message,
+            },
+          );
+
+        if (
+          createdPromise.created
+        ) {
+          reply =
+            buildPaymentPromiseReply(
+              {
+                locale:
+                  promiseIntent.locale,
+                invoiceNumber:
+                  createdPromise
+                    .invoice
+                    .invoice_number ||
+                  createdPromise
+                    .invoice
+                    .id,
+                promiseDate:
+                  createdPromise
+                    .promise
+                    .promise_date,
+              },
+            );
         } else if (
           createdPromise.reason ===
             "duplicate_active_promise" &&
@@ -1991,9 +2385,12 @@ export async function runCustomerOrchestrator(
                 locale:
                   promiseIntent.locale,
                 invoiceNumber:
-                  invoiceMatch.invoice
+                  invoiceMatch
+                    .invoice
                     .invoice_number ||
-                  invoiceMatch.invoice.id,
+                  invoiceMatch
+                    .invoice
+                    .id,
                 promiseDate:
                   createdPromise
                     .existingPromise
@@ -2022,9 +2419,11 @@ export async function runCustomerOrchestrator(
 
   if (
     directReply &&
-    promiseIntent.kind === "none"
+    promiseIntent.kind ===
+      "none"
   ) {
-    reply = directReply;
+    reply =
+      directReply;
   }
 
   /* ---------------------------------------------------------------------- */
@@ -2039,7 +2438,9 @@ export async function runCustomerOrchestrator(
 
   const hasModelOverride =
     Boolean(
-      process.env["DUELY_AI_MODEL"],
+      process.env[
+        "DUELY_AI_MODEL"
+      ],
     );
 
   const lastUserMessage =
@@ -2047,28 +2448,33 @@ export async function runCustomerOrchestrator(
       .reverse()
       .find(
         (msg) =>
-          msg.role === "user",
+          msg.role ===
+          "user",
       )?.content;
 
-  const generationDiagnostics = {
-    model: requestedModel,
-    baseModel,
-    hasModelOverride,
-    hasOpenAiApiKey:
-      Boolean(
-        process.env[
-          "OPENAI_API_KEY"
-        ],
-      ),
-    messageCount:
-      messages.length,
-    lastUserMessageLength:
-      lastUserMessage?.length ?? 0,
-  };
+  const generationDiagnostics =
+    {
+      model:
+        requestedModel,
+      baseModel,
+      hasModelOverride,
+      hasOpenAiApiKey:
+        Boolean(
+          process.env[
+            "OPENAI_API_KEY"
+          ],
+        ),
+      messageCount:
+        messages.length,
+      lastUserMessageLength:
+        lastUserMessage
+          ?.length ?? 0,
+    };
 
   if (
     !directReply &&
-    promiseIntent.kind === "none"
+    promiseIntent.kind ===
+      "none"
   ) {
     try {
       console.log(
@@ -2077,38 +2483,49 @@ export async function runCustomerOrchestrator(
       );
 
       const result =
-        await generateText({
-          model:
-            getDuelyModel("fast"),
+        await generateText(
+          {
+            model:
+              getDuelyModel(
+                "fast",
+              ),
 
-          system: `
+            system: `
 ${CUSTOMER_SYSTEM}
 
 CURRENT CUSTOMER CONTEXT:
 
-${JSON.stringify(context)}
+${JSON.stringify(
+  context,
+)}
 `,
 
-          messages,
-        });
+            messages,
+          },
+        );
 
       const trimmedText =
-        result.text?.trim() || "";
+        result.text?.trim() ||
+        "";
 
-      const resultDiagnostics = {
-        ...generationDiagnostics,
-        resultTextLength:
-          trimmedText.length,
-        finishReason:
-          result.finishReason,
-        usage: result.usage,
-        providerMetadata:
-          sanitizeProviderMetadata(
-            result.providerMetadata,
-          ),
-      };
+      const resultDiagnostics =
+        {
+          ...generationDiagnostics,
+          resultTextLength:
+            trimmedText.length,
+          finishReason:
+            result.finishReason,
+          usage:
+            result.usage,
+          providerMetadata:
+            sanitizeProviderMetadata(
+              result.providerMetadata,
+            ),
+        };
 
-      if (!trimmedText) {
+      if (
+        !trimmedText
+      ) {
         console.error(
           "[Customer AI] Empty generation response",
           resultDiagnostics,
@@ -2124,7 +2541,8 @@ ${JSON.stringify(context)}
           resultDiagnostics,
         );
 
-        reply = trimmedText;
+        reply =
+          trimmedText;
       }
     } catch (error) {
       console.error(
@@ -2153,14 +2571,18 @@ ${JSON.stringify(context)}
           : "";
 
       if (
-        errorMessage.includes("429")
+        errorMessage.includes(
+          "429",
+        )
       ) {
         reply =
           locale === "ar"
             ? "خدمة الذكاء الاصطناعي مشغولة مؤقتاً. يرجى المحاولة بعد قليل."
             : "Haseel AI is temporarily busy. Please try again in a moment.";
       } else if (
-        errorMessage.includes("402")
+        errorMessage.includes(
+          "402",
+        )
       ) {
         reply =
           locale === "ar"
@@ -2177,12 +2599,20 @@ ${JSON.stringify(context)}
   await supabase
     .from("ai_conversations")
     .insert({
-      owner_id: ownerId,
-      session_id: sessionId,
-      role: "assistant",
-      message: reply,
-      context: conversationContext as never,
+      owner_id:
+        ownerId,
+      session_id:
+        sessionId,
+      role:
+        "assistant",
+      message:
+        reply,
+      context:
+        conversationContext as never,
     });
 
-  return { reply };
+  return {
+    reply,
+  };
 }
+```
