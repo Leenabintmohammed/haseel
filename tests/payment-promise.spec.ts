@@ -276,12 +276,17 @@ describe("payment promise date parsing and intent detection", () => {
     expect(parsePaymentPromiseDate("I'll pay on Friday", { now: base, timezone: "UTC" })).toBe("2026-09-11");
     expect(parsePaymentPromiseDate("I will pay on 7/9/2026", { now: base, timezone: "UTC" })).toBe("2026-09-07");
     expect(parsePaymentPromiseDate("I will pay on 7 September 2026", { now: base, timezone: "UTC" })).toBe("2026-09-07");
+    expect(parsePaymentPromiseDate("I'll pay on September 7", { now: base, timezone: "UTC" })).toBe("2026-09-07");
+    expect(parsePaymentPromiseDate("I will pay on 7 September", { now: base, timezone: "UTC" })).toBe("2026-09-07");
+    expect(parsePaymentPromiseDate("I'll pay on Sep 7", { now: base, timezone: "UTC" })).toBe("2026-09-07");
   });
 
   it("parses supported Arabic dates", () => {
     expect(parsePaymentPromiseDate("سأدفع غداً", { now: base, timezone: "UTC" })).toBe("2026-09-06");
     expect(parsePaymentPromiseDate("سأدفع بعد يومين", { now: base, timezone: "UTC" })).toBe("2026-09-07");
     expect(parsePaymentPromiseDate("سأحول المبلغ يوم الأحد", { now: base, timezone: "UTC" })).toBe("2026-09-06");
+    expect(parsePaymentPromiseDate("سأدفع يوم 7 سبتمبر", { now: base, timezone: "UTC" })).toBe("2026-09-07");
+    expect(parsePaymentPromiseDate("سأدفع في 7 سبتمبر", { now: base, timezone: "UTC" })).toBe("2026-09-07");
   });
 
   it("rejects invalid explicit dates", () => {
@@ -295,6 +300,11 @@ describe("payment promise date parsing and intent detection", () => {
       locale: "en",
       promiseDate: "2026-09-06",
     });
+    expect(detectPaymentPromiseIntent("I'll pay on September 7", { now: base, timezone: "UTC" })).toEqual({
+      kind: "confirmed",
+      locale: "en",
+      promiseDate: "2026-09-07",
+    });
     expect(detectPaymentPromiseIntent("I will pay on 7 September 2026", { now: base, timezone: "UTC" })).toEqual({
       kind: "confirmed",
       locale: "en",
@@ -305,10 +315,24 @@ describe("payment promise date parsing and intent detection", () => {
       locale: "ar",
       promiseDate: "2026-09-06",
     });
+    expect(detectPaymentPromiseIntent("سأدفع في 7 سبتمبر", { now: base, timezone: "UTC" })).toEqual({
+      kind: "confirmed",
+      locale: "ar",
+      promiseDate: "2026-09-07",
+    });
     expect(detectPaymentPromiseIntent("I might pay tomorrow", { now: base, timezone: "UTC" })).toEqual({
       kind: "none",
       locale: "en",
     });
+  });
+
+  it("rolls yearless month-day dates to the next year only after they have passed", () => {
+    const lateYearBase = new Date("2026-12-31T10:00:00.000Z");
+    const afterDateBase = new Date("2026-09-08T10:00:00.000Z");
+
+    expect(parsePaymentPromiseDate("I'll pay on January 2", { now: lateYearBase, timezone: "UTC" })).toBe("2027-01-02");
+    expect(parsePaymentPromiseDate("سأدفع في 7 سبتمبر", { now: afterDateBase, timezone: "UTC" })).toBe("2027-09-07");
+    expect(parsePaymentPromiseDate("I'll pay on September 8", { now: new Date("2026-09-08T10:00:00.000Z"), timezone: "UTC" })).toBeNull();
   });
 });
 

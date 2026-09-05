@@ -96,6 +96,61 @@ function isValidCalendarDate(year: number, month: number, day: number): boolean 
   );
 }
 
+const ENGLISH_MONTHS = new Map<string, number>([
+  ["january", 1],
+  ["jan", 1],
+  ["february", 2],
+  ["feb", 2],
+  ["march", 3],
+  ["mar", 3],
+  ["april", 4],
+  ["apr", 4],
+  ["may", 5],
+  ["june", 6],
+  ["jun", 6],
+  ["july", 7],
+  ["jul", 7],
+  ["august", 8],
+  ["aug", 8],
+  ["september", 9],
+  ["sep", 9],
+  ["sept", 9],
+  ["october", 10],
+  ["oct", 10],
+  ["november", 11],
+  ["nov", 11],
+  ["december", 12],
+  ["dec", 12],
+]);
+
+const ARABIC_MONTHS = new Map<string, number>([
+  ["يناير", 1],
+  ["كانون الثاني", 1],
+  ["فبراير", 2],
+  ["مارس", 3],
+  ["ابريل", 4],
+  ["أبريل", 4],
+  ["نيسان", 4],
+  ["مايو", 5],
+  ["أيار", 5],
+  ["يونيو", 6],
+  ["حزيران", 6],
+  ["يوليو", 7],
+  ["تموز", 7],
+  ["اغسطس", 8],
+  ["أغسطس", 8],
+  ["آب", 8],
+  ["سبتمبر", 9],
+  ["أيلول", 9],
+  ["اكتوبر", 10],
+  ["أكتوبر", 10],
+  ["تشرين الاول", 10],
+  ["نوفمبر", 11],
+  ["تشرين الثاني", 11],
+  ["ديسمبر", 12],
+  ["كانون الاول", 12],
+]);
+
 function addDays(dateKey: string, days: number): string {
   const [year, month, day] = dateKey.split("-").map(Number);
   const date = new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1));
@@ -168,22 +223,8 @@ function parseExplicitDate(value: string): string | null {
     /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*|\s+)(20\d{2})\b/u,
   );
   if (englishMonthMatch) {
-    const months = [
-      "january",
-      "february",
-      "march",
-      "april",
-      "may",
-      "june",
-      "july",
-      "august",
-      "september",
-      "october",
-      "november",
-      "december",
-    ];
     const year = Number(englishMonthMatch[3]);
-    const month = months.indexOf(englishMonthMatch[1]!) + 1;
+    const month = ENGLISH_MONTHS.get(englishMonthMatch[1]!) ?? 0;
     const day = Number(englishMonthMatch[2]);
     return isValidCalendarDate(year, month, day)
       ? isoFromParts(year, month, day)
@@ -194,26 +235,86 @@ function parseExplicitDate(value: string): string | null {
     /\b(\d{1,2})(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december)(?:,\s*|\s+)(20\d{2})\b/u,
   );
   if (englishDayMonthMatch) {
-    const months = [
-      "january",
-      "february",
-      "march",
-      "april",
-      "may",
-      "june",
-      "july",
-      "august",
-      "september",
-      "october",
-      "november",
-      "december",
-    ];
     const year = Number(englishDayMonthMatch[3]);
-    const month = months.indexOf(englishDayMonthMatch[2]!) + 1;
+    const month = ENGLISH_MONTHS.get(englishDayMonthMatch[2]!) ?? 0;
     const day = Number(englishDayMonthMatch[1]);
     return isValidCalendarDate(year, month, day)
       ? isoFromParts(year, month, day)
       : null;
+  }
+
+  return null;
+}
+
+function resolveYearlessDate(
+  month: number,
+  day: number,
+  today: string,
+): string | null {
+  const currentYear = Number(today.slice(0, 4));
+  const currentYearDate = isValidCalendarDate(currentYear, month, day)
+    ? isoFromParts(currentYear, month, day)
+    : null;
+
+  if (currentYearDate && currentYearDate > today) {
+    return currentYearDate;
+  }
+
+  const nextYear = currentYear + 1;
+  const nextYearDate = isValidCalendarDate(nextYear, month, day)
+    ? isoFromParts(nextYear, month, day)
+    : null;
+
+  if (currentYearDate && currentYearDate < today) {
+    return nextYearDate;
+  }
+
+  return null;
+}
+
+function parseMonthNameDateWithoutYear(value: string, today: string): string | null {
+  const englishMonthDayMatch = value.match(
+    /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/u,
+  );
+  if (englishMonthDayMatch) {
+    return resolveYearlessDate(
+      ENGLISH_MONTHS.get(englishMonthDayMatch[1]!) ?? 0,
+      Number(englishMonthDayMatch[2]),
+      today,
+    );
+  }
+
+  const englishDayMonthMatch = value.match(
+    /\b(\d{1,2})(?:st|nd|rd|th)?\s+(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\b/u,
+  );
+  if (englishDayMonthMatch) {
+    return resolveYearlessDate(
+      ENGLISH_MONTHS.get(englishDayMonthMatch[2]!) ?? 0,
+      Number(englishDayMonthMatch[1]),
+      today,
+    );
+  }
+
+  const arabicMonthDayMatch = value.match(
+    /(?:^|\s)(\d{1,2})\s+(يناير|كانون الثاني|فبراير|مارس|أبريل|ابريل|نيسان|مايو|أيار|يونيو|حزيران|يوليو|تموز|أغسطس|اغسطس|آب|سبتمبر|أيلول|أكتوبر|اكتوبر|تشرين الاول|نوفمبر|تشرين الثاني|ديسمبر|كانون الاول)(?:\s|$)/u,
+  );
+  if (arabicMonthDayMatch) {
+    return resolveYearlessDate(
+      ARABIC_MONTHS.get(arabicMonthDayMatch[2]!) ?? 0,
+      Number(arabicMonthDayMatch[1]),
+      today,
+    );
+  }
+
+  const arabicMonthFirstMatch = value.match(
+    /(?:^|\s)(يناير|كانون الثاني|فبراير|مارس|أبريل|ابريل|نيسان|مايو|أيار|يونيو|حزيران|يوليو|تموز|أغسطس|اغسطس|آب|سبتمبر|أيلول|أكتوبر|اكتوبر|تشرين الاول|نوفمبر|تشرين الثاني|ديسمبر|كانون الاول)\s+(\d{1,2})(?:\s|$)/u,
+  );
+  if (arabicMonthFirstMatch) {
+    return resolveYearlessDate(
+      ARABIC_MONTHS.get(arabicMonthFirstMatch[1]!) ?? 0,
+      Number(arabicMonthFirstMatch[2]),
+      today,
+    );
   }
 
   return null;
@@ -285,6 +386,7 @@ export function parsePaymentPromiseDate(
   const normalized = normalizeText(message);
   const explicitDate =
     parseExplicitDate(normalized) ??
+    parseMonthNameDateWithoutYear(normalized, today) ??
     parseRelativeDate(normalized, today) ??
     parseWeekdayDate(normalized, today);
 
