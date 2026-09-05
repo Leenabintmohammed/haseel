@@ -2080,14 +2080,12 @@ export async function runCustomerOrchestrator(
     );
   }
 
-  const previousAssistantMessage =
-    [...(historyBefore ?? [])]
-      .reverse()
-      .find(
-        (item) =>
-          item.role ===
-          "assistant",
-      )?.message ?? null;
+const previousAssistantMessage =
+  (historyBefore ?? [])
+    .find(
+      (item) =>
+        item.role === "assistant",
+    )?.message ?? null;
 console.log(
   "[Customer AI] Payment plan state",
   {
