@@ -283,6 +283,11 @@ describe("payment promise date parsing and intent detection", () => {
     expect(parsePaymentPromiseDate("سأحول المبلغ يوم الأحد", { now: base, timezone: "UTC" })).toBe("2026-09-06");
   });
 
+  it("rejects invalid explicit dates", () => {
+    expect(parsePaymentPromiseDate("I will pay on 31/02/2026", { now: base, timezone: "UTC" })).toBeNull();
+    expect(parsePaymentPromiseDate("I will pay on 2026-13-40", { now: base, timezone: "UTC" })).toBeNull();
+  });
+
   it("detects clear English and Arabic payment commitments but ignores vague language", () => {
     expect(detectPaymentPromiseIntent("I will pay tomorrow", { now: base, timezone: "UTC" })).toEqual({
       kind: "confirmed",

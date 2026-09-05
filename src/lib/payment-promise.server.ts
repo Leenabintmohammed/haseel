@@ -80,6 +80,22 @@ function isoFromParts(year: number, month: number, day: number): string {
   return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+function isValidCalendarDate(year: number, month: number, day: number): boolean {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
 function addDays(dateKey: string, days: number): string {
   const [year, month, day] = dateKey.split("-").map(Number);
   const date = new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1));
@@ -130,16 +146,22 @@ function nextWeekday(baseDate: string, targetDay: number): string {
 function parseExplicitDate(value: string): string | null {
   const isoMatch = value.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/u);
   if (isoMatch) {
-    return isoFromParts(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3]));
+    const year = Number(isoMatch[1]);
+    const month = Number(isoMatch[2]);
+    const day = Number(isoMatch[3]);
+    return isValidCalendarDate(year, month, day)
+      ? isoFromParts(year, month, day)
+      : null;
   }
 
   const dayFirstMatch = value.match(/\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b/u);
   if (dayFirstMatch) {
-    return isoFromParts(
-      Number(dayFirstMatch[3]),
-      Number(dayFirstMatch[2]),
-      Number(dayFirstMatch[1]),
-    );
+    const year = Number(dayFirstMatch[3]);
+    const month = Number(dayFirstMatch[2]);
+    const day = Number(dayFirstMatch[1]);
+    return isValidCalendarDate(year, month, day)
+      ? isoFromParts(year, month, day)
+      : null;
   }
 
   const englishMonthMatch = value.match(
@@ -160,11 +182,12 @@ function parseExplicitDate(value: string): string | null {
       "november",
       "december",
     ];
-    return isoFromParts(
-      Number(englishMonthMatch[3]),
-      months.indexOf(englishMonthMatch[1]!) + 1,
-      Number(englishMonthMatch[2]),
-    );
+    const year = Number(englishMonthMatch[3]);
+    const month = months.indexOf(englishMonthMatch[1]!) + 1;
+    const day = Number(englishMonthMatch[2]);
+    return isValidCalendarDate(year, month, day)
+      ? isoFromParts(year, month, day)
+      : null;
   }
 
   const englishDayMonthMatch = value.match(
@@ -185,11 +208,12 @@ function parseExplicitDate(value: string): string | null {
       "november",
       "december",
     ];
-    return isoFromParts(
-      Number(englishDayMonthMatch[3]),
-      months.indexOf(englishDayMonthMatch[2]!) + 1,
-      Number(englishDayMonthMatch[1]),
-    );
+    const year = Number(englishDayMonthMatch[3]);
+    const month = months.indexOf(englishDayMonthMatch[2]!) + 1;
+    const day = Number(englishDayMonthMatch[1]);
+    return isValidCalendarDate(year, month, day)
+      ? isoFromParts(year, month, day)
+      : null;
   }
 
   return null;

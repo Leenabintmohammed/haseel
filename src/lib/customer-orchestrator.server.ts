@@ -557,10 +557,12 @@ export async function runCustomerOrchestrator(
     locale,
   });
 
-  const promiseIntent = detectPaymentPromiseIntent(message, {
-    now: new Date(),
-    timezone: customerTimezone,
-  });
+  const promiseIntent = directReply
+    ? { kind: "none" as const, locale }
+    : detectPaymentPromiseIntent(message, {
+        now: new Date(),
+        timezone: customerTimezone,
+      });
   if (promiseIntent.kind === "confirmed") {
     const invoiceMatch = findPromiseInvoiceMatch(
       message,

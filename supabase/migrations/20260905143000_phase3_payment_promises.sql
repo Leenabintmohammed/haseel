@@ -14,11 +14,11 @@ CREATE TABLE IF NOT EXISTS public.payment_promises (
   CONSTRAINT payment_promises_owner_invoice_fkey
     FOREIGN KEY (owner_id, invoice_id)
     REFERENCES public.invoices (owner_id, id)
-    ON DELETE SET NULL (invoice_id),
+    ON DELETE CASCADE,
   CONSTRAINT payment_promises_owner_client_fkey
     FOREIGN KEY (owner_id, client_id)
     REFERENCES public.clients (owner_id, id)
-    ON DELETE SET NULL (client_id)
+    ON DELETE CASCADE
 );
 
 GRANT SELECT, INSERT, UPDATE ON public.payment_promises TO authenticated;
