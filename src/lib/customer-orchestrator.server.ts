@@ -554,6 +554,31 @@ function buildDirectCustomerReply(
   return null;
 }
 
+
+function buildGreetingReply(
+  message: string,
+  locale: "ar" | "en",
+): string | null {
+  const normalized =
+    normalizeMessage(message);
+
+  const isGreeting =
+    /^(hi|hello|hey|good morning|good afternoon|good evening)$/i.test(
+      normalized,
+    ) ||
+    /^(السلام عليكم|سلام|هلا|مرحبا|مرحباً|اهلا|أهلا|أهلًا|صباح الخير|مساء الخير)$/u.test(
+      normalized,
+    );
+
+  if (!isGreeting) {
+    return null;
+  }
+
+  return locale === "ar"
+    ? "مرحباً، كيف يمكنني مساعدتك؟"
+    : "Hi. How can I help you?";
+}
+
 /* -------------------------------------------------------------------------- */
 /* Payment Plan Request                                                       */
 /* -------------------------------------------------------------------------- */
@@ -2369,6 +2394,40 @@ export async function runCustomerOrchestrator(
       ? "تعذر معالجة رسالتك حالياً. يرجى المحاولة مرة أخرى."
       : "I couldn't process your message right now. Please try again.";
 
+  /* ---------------------------------------------------------------------- */
+  /* 0. Greeting                                                           */
+  /* ---------------------------------------------------------------------- */
+
+  const greetingReply =
+    buildGreetingReply(
+      message,
+      locale,
+    );
+
+  if (greetingReply) {
+    await supabase
+      .from("ai_conversations")
+      .insert({
+        owner_id:
+          ownerId,
+        session_id:
+          sessionId,
+        role:
+          "assistant",
+        message:
+          greetingReply,
+        context:
+          conversationContext as never,
+      });
+
+    return {
+      reply:
+        greetingReply,
+    };
+  }
+
+
+  
   /* ---------------------------------------------------------------------- */
   /* 1. Payment Plan Request                                                */
   /* ---------------------------------------------------------------------- */
