@@ -74,6 +74,18 @@ class QueryBuilder {
     this.updatePatch = patch;
     return this;
   }
+
+  then<TResult1 = QueryResult, TResult2 = never>(
+    onfulfilled?: ((value: QueryResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ) {
+    const result: QueryResult = this.insertRows
+      ? this.mock.insertSingle(this.table, this.insertRows[0] ?? {})
+      : this.updatePatch
+        ? this.mock.updateSingle(this.table, this.filters, this.updatePatch)
+        : { data: this.mock.selectRows(this.table, this.filters), error: null };
+    return Promise.resolve(result).then(onfulfilled, onrejected);
+  }
 }
 
 class MockSupabase {

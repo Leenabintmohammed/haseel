@@ -105,6 +105,7 @@ function normalizeDigits(value: string): string {
 function normalizeText(value: string): string {
   return normalizeDigits(value)
     .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/gu, "")
     .replace(/[^\p{L}\p{N}\s/-]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -195,7 +196,7 @@ function parseExplicitDate(value: string): string | null {
 }
 
 function parseRelativeDate(value: string, today: string): string | null {
-  if (/\btomorrow\b/u.test(value) || /\bغد[اً]?\b/u.test(value) || /\bبكرة\b/u.test(value)) {
+  if (/\btomorrow\b/u.test(value) || /(غداً|غدًا|غدا|غد)/u.test(value) || /(بكرة|بكرا)/u.test(value)) {
     return addDays(today, 1);
   }
 
@@ -212,11 +213,11 @@ function parseRelativeDate(value: string, today: string): string | null {
     return addDays(today, 2);
   }
 
-  if (/\bبعد يومين\b/u.test(value)) {
+  if (/بعد يومين/u.test(value)) {
     return addDays(today, 2);
   }
 
-  const arabicDaysMatch = value.match(/\bبعد\s+(\d+)\s+(?:يوم|أيام|ايام)\b/u);
+  const arabicDaysMatch = value.match(/بعد\s+(\d+)\s+(?:يوم|أيام|ايام)/u);
   if (arabicDaysMatch) {
     return addDays(today, Number(arabicDaysMatch[1]));
   }
@@ -233,13 +234,13 @@ function parseWeekdayDate(value: string, today: string): string | null {
     [/\b(?:friday)\b/u, 5],
     [/\b(?:saturday)\b/u, 6],
     [/\b(?:sunday)\b/u, 0],
-    [/\b(?:الاثنين|الإثنين)\b/u, 1],
-    [/\bالثلاثاء\b/u, 2],
-    [/\b(?:الاربعاء|الأربعاء)\b/u, 3],
-    [/\bالخميس\b/u, 4],
-    [/\bالجمعة\b/u, 5],
-    [/\bالسبت\b/u, 6],
-    [/\b(?:الاحد|الأحد)\b/u, 0],
+    [/(الاثنين|الإثنين)/u, 1],
+    [/(الثلاثاء)/u, 2],
+    [/(الاربعاء|الأربعاء)/u, 3],
+    [/(الخميس)/u, 4],
+    [/(الجمعة)/u, 5],
+    [/(السبت)/u, 6],
+    [/(الاحد|الأحد)/u, 0],
   ];
 
   for (const [pattern, day] of weekdays) {
@@ -290,7 +291,7 @@ export function detectPaymentPromiseIntent(
   const normalized = normalizeText(message);
   const vaguePattern =
     /\b(?:maybe|might|try|trying|hope|hopefully|perhaps|probably)\b/u.test(normalized) ||
-    /\b(?:ربما|قد|يمكن|سأحاول|احاول|أتمنى|ان شاء الله|إن شاء الله)\b/u.test(normalized);
+    /(ربما|قد|يمكن|سأحاول|احاول|أتمنى|ان شاء الله|إن شاء الله)/u.test(normalized);
   if (vaguePattern) {
     return { kind: "none", locale };
   }
@@ -298,7 +299,7 @@ export function detectPaymentPromiseIntent(
   const hasCommitment =
     /\b(?:i will|i ll|i'll|we will|we ll|we'll)\b.*\b(?:pay|transfer|send)\b/u.test(normalized) ||
     /\b(?:pay|transfer|send)\b.*\b(?:tomorrow|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}[/-]\d{1,2}|20\d{2})\b/u.test(normalized) ||
-    /\b(?:سأدفع|سادفع|سأحول|ساحول|سأرسل|سارسل|سأقوم بتحويل)\b/u.test(normalized);
+    /(سأدفع|سادفع|سأحول|ساحول|سأرسل|سارسل|سأقوم بتحويل)/u.test(normalized);
   if (!hasCommitment) {
     return { kind: "none", locale };
   }

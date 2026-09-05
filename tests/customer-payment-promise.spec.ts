@@ -99,6 +99,16 @@ class QueryBuilder {
     });
   }
 
+  then<TResult1 = QueryResult, TResult2 = never>(
+    onfulfilled?: ((value: QueryResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ) {
+    const result = this.pendingInsert
+      ? { data: this.mock.insertRow(this.table, this.pendingInsert), error: null }
+      : { data: this.resolveRows(), error: null };
+    return Promise.resolve(result).then(onfulfilled, onrejected);
+  }
+
   private resolveRows() {
     const rows = this.mock.resolveRows(this.table, this.filters, this.orderBy);
     return this.limitCount == null ? rows : rows.slice(0, this.limitCount);
