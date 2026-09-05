@@ -26,6 +26,7 @@ type CustomerInvoice = {
   paid_date: string | null;
   paid_amount: number | null;
   remaining_balance: number | null;
+  payment_link: string | null;
 };
 
 type CustomerPayment = {
@@ -51,6 +52,183 @@ type CustomerPlan = {
   status: string | null;
 };
 
+type BusinessPaymentSettings = {
+  bank_name: string | null;
+  account_name: string | null;
+  account_number: string | null;
+  iban: string | null;
+  swift_bic: string | null;
+  payment_instructions: string | null;
+};
+
+type OutstandingTotal = {
+  currency: string;
+  outstanding: number;
+};
+
+function toFiniteNumber(value: number | null | undefined): number {
+  return Number.isFinite(value) ? Number(value) : 0;
+}
+
+function isArabicText(value: string): boolean {
+  return /[\u0600-\u06FF]/u.test(value);
+}
+
+function normalizeMessage(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+}
+
+function formatPlainAmount(amount: number, locale: "ar" | "en"): string {
+  return amount.toLocaleString(locale === "ar" ? "ar-AE" : "en-AE", {
+    maximumFractionDigits: 2,
+  });
+}
+
+function buildOutstandingTotals(invoices: CustomerInvoice[]): OutstandingTotal[] {
+  const totals = new Map<string, number>();
+
+  for (const invoice of invoices) {
+    const currency = invoice.currency?.trim() || "UNSPECIFIED";
+    if (!totals.has(currency)) {
+      totals.set(currency, 0);
+    }
+
+    const remainingBalance = toFiniteNumber(invoice.remaining_balance);
+    if (remainingBalance > 0) {
+      totals.set(currency, toFiniteNumber(totals.get(currency)) + remainingBalance);
+    }
+  }
+
+  return [...totals.entries()]
+    .map(([currency, outstanding]) => ({ currency, outstanding }))
+    .sort((a, b) => a.currency.localeCompare(b.currency));
+}
+
+function buildPaymentInstructions(
+  paymentSettings: BusinessPaymentSettings | null,
+): string[] {
+  if (!paymentSettings) {
+    return [];
+  }
+
+  return [
+    paymentSettings.bank_name ? `Bank: ${paymentSettings.bank_name}` : null,
+    paymentSettings.account_name
+      ? `Account name: ${paymentSettings.account_name}`
+      : null,
+    paymentSettings.account_number
+      ? `Account number: ${paymentSettings.account_number}`
+      : null,
+    paymentSettings.iban ? `IBAN: ${paymentSettings.iban}` : null,
+    paymentSettings.swift_bic ? `SWIFT/BIC: ${paymentSettings.swift_bic}` : null,
+    paymentSettings.payment_instructions
+      ? `Instructions: ${paymentSettings.payment_instructions}`
+      : null,
+  ].filter((line): line is string => Boolean(line?.trim()));
+}
+
+function isOutstandingAmountQuestion(message: string): boolean {
+  const normalized = normalizeMessage(message);
+  return (
+    /(total outstanding amount|outstanding amount|total due|amount due|balance due)/i.test(
+      normalized,
+    ) ||
+    /((اجمالي|إجمالي|مجموع).*(المبلغ|الرصيد).*(المستحق|المتبقي))|(كم.*(المستحق|المتبقي))/u.test(
+      message,
+    )
+  );
+}
+
+function isPaymentLinkQuestion(message: string): boolean {
+  const normalized = normalizeMessage(message);
+  return (
+    /(payment link|pay link|payment url|link to pay|pay online)/i.test(normalized) ||
+    /(رابط\s*الدفع|لينك\s*الدفع|وصلة\s*الدفع|هل.*رابط.*دفع)/u.test(message)
+  );
+}
+
+function buildOutstandingReply(
+  invoices: CustomerInvoice[],
+  locale: "ar" | "en",
+): string | null {
+  if (invoices.length === 0) {
+    return locale === "ar"
+      ? "لا يمكنني التحقق من أي فواتير لحسابك حالياً."
+      : "I couldn't verify any invoices for your account right now.";
+  }
+
+  return buildOutstandingTotals(invoices)
+    .map(({ currency, outstanding }) =>
+      locale === "ar"
+        ? `${currency} ${formatPlainAmount(outstanding, locale)} مستحق`
+        : `${currency} ${formatPlainAmount(outstanding, locale)} outstanding`,
+    )
+    .join("\n");
+}
+
+function buildPaymentLinkReply(input: {
+  invoices: CustomerInvoice[];
+  paymentSettings: BusinessPaymentSettings | null;
+  locale: "ar" | "en";
+}): string {
+  const { invoices, paymentSettings, locale } = input;
+  const paymentLinks = invoices
+    .filter((invoice) => Boolean(invoice.payment_link?.trim()))
+    .map((invoice) => ({
+      invoiceNumber: invoice.invoice_number?.trim() || invoice.id,
+      paymentLink: invoice.payment_link!.trim(),
+    }));
+
+  if (paymentLinks.length > 0) {
+    return paymentLinks
+      .map(({ invoiceNumber, paymentLink }) =>
+        locale === "ar"
+          ? `رابط الدفع للفاتورة ${invoiceNumber}: ${paymentLink}`
+          : `Payment link for invoice ${invoiceNumber}: ${paymentLink}`,
+      )
+      .join("\n");
+  }
+
+  const paymentInstructions = buildPaymentInstructions(paymentSettings);
+  const unavailableMessage =
+    locale === "ar"
+      ? "لا يوجد رابط دفع متاح حالياً."
+      : "There is no payment link currently available.";
+
+  if (paymentInstructions.length === 0) {
+    return unavailableMessage;
+  }
+
+  return [
+    unavailableMessage,
+    locale === "ar"
+      ? "يمكنك استخدام تفاصيل الدفع التالية بدلاً من ذلك:"
+      : "You can use these payment details instead:",
+    ...paymentInstructions,
+  ].join("\n");
+}
+
+function buildDirectCustomerReply(input: {
+  message: string;
+  invoices: CustomerInvoice[];
+  paymentSettings: BusinessPaymentSettings | null;
+  locale: "ar" | "en";
+}): string | null {
+  if (isOutstandingAmountQuestion(input.message)) {
+    return buildOutstandingReply(input.invoices, input.locale);
+  }
+
+  if (isPaymentLinkQuestion(input.message)) {
+    return buildPaymentLinkReply({
+      invoices: input.invoices,
+      paymentSettings: input.paymentSettings,
+      locale: input.locale,
+    });
+  }
+
+  return null;
+}
+
 const CUSTOMER_SYSTEM = `
 You are Haseel's customer-facing WhatsApp assistant.
 
@@ -74,6 +252,11 @@ RULES
 - Only state financial information that exists in CURRENT CUSTOMER CONTEXT.
 - You may explain invoice amounts, due dates, statuses, paid amounts, remaining balances, recorded payments, and existing payment plans.
 - Never calculate or guess a balance when the required value is not available in the context.
+- When asked for a total outstanding amount, use each invoice's remaining_balance only. Never use the original amount as the outstanding amount.
+- Do not count invoices with remaining_balance = 0 as outstanding. Sum only invoices where remaining_balance > 0.
+- Never combine different currencies into one total. If multiple currencies are present, report a separate outstanding total for each currency.
+- If a customer asks for a payment link, only use the payment_link values shown in CURRENT CUSTOMER CONTEXT for that customer's own invoices.
+- If a payment_link exists, provide it exactly. If no payment_link exists, clearly say no payment link is currently available. You may provide the business payment instructions shown in CURRENT CUSTOMER CONTEXT as an alternative.
 - If information is missing from the context, say that you cannot verify it through WhatsApp.
 - You currently have NO tools and cannot modify financial records.
 - If the customer asks for a discount, cancellation, changed payment terms, debt forgiveness, or another account-level change, explain that the business/account owner must handle or approve it.
@@ -167,11 +350,12 @@ export async function runCustomerOrchestrator(
     { data: invoices, error: invoiceError },
     { data: payments, error: paymentError },
     { data: plans, error: plansError },
+    { data: paymentSettings, error: paymentSettingsError },
   ] = await Promise.all([
     supabase
       .from("invoices")
       .select(
-        "id, invoice_number, amount, currency, status, due_date, paid_date, paid_amount, remaining_balance",
+        "id, invoice_number, amount, currency, status, due_date, paid_date, paid_amount, remaining_balance, payment_link",
       )
       .eq("owner_id", ownerId)
       .eq("client_id", clientId)
@@ -197,6 +381,14 @@ export async function runCustomerOrchestrator(
       .eq("client_id", clientId)
       .order("created_at", { ascending: false })
       .limit(20),
+
+    supabase
+      .from("business_payment_settings")
+      .select(
+        "bank_name, account_name, account_number, iban, swift_bic, payment_instructions",
+      )
+      .eq("owner_id", ownerId)
+      .maybeSingle(),
   ]);
 
   if (invoiceError) {
@@ -211,6 +403,19 @@ export async function runCustomerOrchestrator(
     console.error("[Customer AI] Payment plan lookup failed", plansError);
   }
 
+  if (paymentSettingsError) {
+    console.error(
+      "[Customer AI] Business payment settings lookup failed",
+      paymentSettingsError,
+    );
+  }
+
+  const customerInvoices = (invoices ?? []) as CustomerInvoice[];
+  const customerPaymentSettings =
+    (paymentSettings as BusinessPaymentSettings | null | undefined) ?? null;
+  const locale: "ar" | "en" =
+    isArabicText(message) || client.preferred_language === "ar" ? "ar" : "en";
+
   const context = {
     customer: {
       name: client.name,
@@ -218,11 +423,32 @@ export async function runCustomerOrchestrator(
       preferred_language: client.preferred_language,
     },
 
-    invoices: (invoices ?? []) as CustomerInvoice[],
+    invoices: customerInvoices,
+
+    outstanding_totals_by_currency: buildOutstandingTotals(customerInvoices),
 
     payments: (payments ?? []) as CustomerPayment[],
 
     payment_plans: (plans ?? []) as CustomerPlan[],
+
+    payment_links: customerInvoices
+      .filter((invoice) => Boolean(invoice.payment_link?.trim()))
+      .map((invoice) => ({
+        invoice_id: invoice.id,
+        invoice_number: invoice.invoice_number,
+        payment_link: invoice.payment_link,
+      })),
+
+    business_payment_details: customerPaymentSettings
+      ? {
+          bank_name: customerPaymentSettings.bank_name,
+          account_name: customerPaymentSettings.account_name,
+          account_number: customerPaymentSettings.account_number,
+          iban: customerPaymentSettings.iban,
+          swift_bic: customerPaymentSettings.swift_bic,
+          payment_instructions: customerPaymentSettings.payment_instructions,
+        }
+      : null,
   };
 
   const conversationContext = {
@@ -269,6 +495,17 @@ export async function runCustomerOrchestrator(
   let reply =
     "I couldn't process your message right now. Please try again.";
 
+  const directReply = buildDirectCustomerReply({
+    message,
+    invoices: customerInvoices,
+    paymentSettings: customerPaymentSettings,
+    locale,
+  });
+
+  if (directReply) {
+    reply = directReply;
+  }
+
   const requestedModel = getDuelyModelId("fast");
   const baseModel = getDuelyBaseModelId("fast");
   const hasModelOverride = Boolean(process.env["DUELY_AI_MODEL"]);
@@ -285,16 +522,17 @@ export async function runCustomerOrchestrator(
     lastUserMessageLength: lastUserMessage?.length ?? 0,
   };
 
-  try {
-    console.log(
-      "[Customer AI] Generation request",
-      generationDiagnostics,
-    );
+  if (!directReply) {
+    try {
+      console.log(
+        "[Customer AI] Generation request",
+        generationDiagnostics,
+      );
 
-    const result = await generateText({
-      model: getDuelyModel("fast"),
+      const result = await generateText({
+        model: getDuelyModel("fast"),
 
-      system: `
+        system: `
 ${CUSTOMER_SYSTEM}
 
 CURRENT CUSTOMER CONTEXT:
@@ -302,57 +540,58 @@ CURRENT CUSTOMER CONTEXT:
 ${JSON.stringify(context)}
 `,
 
-      messages,
-    });
+        messages,
+      });
 
-    const trimmedText = result.text?.trim() || "";
+      const trimmedText = result.text?.trim() || "";
 
-    const resultDiagnostics = {
-      ...generationDiagnostics,
-      resultTextLength: trimmedText.length,
-      finishReason: result.finishReason,
-      usage: result.usage,
-      providerMetadata: sanitizeProviderMetadata(
-        result.providerMetadata,
-      ),
-    };
+      const resultDiagnostics = {
+        ...generationDiagnostics,
+        resultTextLength: trimmedText.length,
+        finishReason: result.finishReason,
+        usage: result.usage,
+        providerMetadata: sanitizeProviderMetadata(
+          result.providerMetadata,
+        ),
+      };
 
-    if (!trimmedText) {
-      console.error(
-        "[Customer AI] Empty generation response",
-        resultDiagnostics,
-      );
-      reply = "AI_GENERATION_EMPTY";
-    } else {
-      console.log(
-        "[Customer AI] Generation completed",
-        resultDiagnostics,
-      );
-      reply = trimmedText;
-    }
-  } catch (error) {
-    console.error("[Customer AI] Generation failed", {
-      ...generationDiagnostics,
-      name: error instanceof Error ? error.name : typeof error,
-      message:
-        error instanceof Error
-          ? error.message
-          : String(error),
-      cause:
-        error instanceof Error && error.cause
-          ? error.cause
-          : undefined,
-    });
+      if (!trimmedText) {
+        console.error(
+          "[Customer AI] Empty generation response",
+          resultDiagnostics,
+        );
+        reply = "AI_GENERATION_EMPTY";
+      } else {
+        console.log(
+          "[Customer AI] Generation completed",
+          resultDiagnostics,
+        );
+        reply = trimmedText;
+      }
+    } catch (error) {
+      console.error("[Customer AI] Generation failed", {
+        ...generationDiagnostics,
+        name: error instanceof Error ? error.name : typeof error,
+        message:
+          error instanceof Error
+            ? error.message
+            : String(error),
+        cause:
+          error instanceof Error && error.cause
+            ? error.cause
+            : undefined,
+      });
 
-    const errorMessage =
-      error instanceof Error ? error.message : "";
+      const errorMessage =
+        error instanceof Error ? error.message : "";
 
-    if (errorMessage.includes("429")) {
-      reply =
-        "Haseel AI is temporarily busy. Please try again in a moment.";
-    } else if (errorMessage.includes("402")) {
-      reply =
-        "Haseel AI is temporarily unavailable. Please contact the business directly.";
+      if (errorMessage.includes("429")) {
+        reply =
+          "Haseel AI is temporarily busy. Please try again in a moment.";
+      } else if (errorMessage.includes("402")) {
+        reply =
+          "Haseel AI is temporarily unavailable. Please contact the business directly.";
+      }
     }
   }
 
