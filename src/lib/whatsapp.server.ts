@@ -382,6 +382,9 @@ export async function sendWhatsAppInvoice(
       notes:
         invoice.notes ??
         undefined,
+      payment_link:
+        invoice.payment_link ??
+        null,
     });
   } catch (error) {
     return {

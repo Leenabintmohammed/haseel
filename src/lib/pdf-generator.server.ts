@@ -22,6 +22,7 @@ export interface InvoicePDFData {
     line_total: number;
   }>;
   notes?: string;
+  payment_link?: string | null;
 }
 
 export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Array> {
@@ -266,6 +267,34 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<Uint8Arr
 
   renderRow("Amount Due", formatAmount(data.amount, data.currency), true);
 
+  if (data.payment_link?.trim()) {
+    mainY -= 15;
+    const paymentLink = data.payment_link.trim();
+    page.drawText("PAYMENT LINK", {
+      x: mainX,
+      y: mainY,
+      size: 7,
+      font: fontBold,
+      color: colors.mutedText,
+    });
+    mainY -= 10;
+    const paymentLinkLines = wrapText(
+      paymentLink,
+      45,
+    );
+    for (const line of paymentLinkLines) {
+      page.drawText(line, {
+        x: mainX,
+        y: mainY,
+        size: 7.5,
+        font: fontRegular,
+        color: colors.rotanaGreen,
+        link: paymentLink,
+      });
+      mainY -= 10;
+    }
+  }
+
   // --- 5. Notes ---
   if (data.notes) {
     mainY -= 15;
@@ -297,6 +326,16 @@ function wrapText(text: string, maxChars: number): string[] {
   let currentLine = "";
   const words = text.split(" ");
   for (const word of words) {
+    if (word.length > maxChars) {
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = "";
+      }
+      for (let index = 0; index < word.length; index += maxChars) {
+        lines.push(word.slice(index, index + maxChars));
+      }
+      continue;
+    }
     if ((currentLine + word).length <= maxChars) {
       currentLine += (currentLine ? " " : "") + word;
     } else {

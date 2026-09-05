@@ -342,6 +342,7 @@ export type Database = {
           items: Json
           notes: string | null
           owner_id: string
+          payment_link: string | null
           paid_amount: number
           paid_date: string | null
           pdf_url: string | null
@@ -370,6 +371,7 @@ export type Database = {
           items?: Json
           notes?: string | null
           owner_id: string
+          payment_link?: string | null
           paid_amount?: number
           paid_date?: string | null
           pdf_url?: string | null
@@ -398,6 +400,7 @@ export type Database = {
           items?: Json
           notes?: string | null
           owner_id?: string
+          payment_link?: string | null
           paid_amount?: number
           paid_date?: string | null
           pdf_url?: string | null
