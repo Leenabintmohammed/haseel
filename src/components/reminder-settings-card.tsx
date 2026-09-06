@@ -28,10 +28,13 @@ export function ReminderSettingsCard() {
   const { lang } = useI18n();
   const queryClient = useQueryClient();
 
-  const settingsQuery = useQuery({
-    queryKey: ["reminder_settings"],
-    queryFn: () => getReminderSettingsFn(),
-  });
+const settingsQuery = useQuery({
+  queryKey: ["reminder_settings"],
+  queryFn: () =>
+    getReminderSettingsFn({
+      data: {},
+    }),
+});
 
   const saveMutation = useMutation({
     mutationFn: (data: ReminderWorkspaceSettings) =>
