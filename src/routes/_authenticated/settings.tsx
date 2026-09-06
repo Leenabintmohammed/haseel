@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { createFileRoute, useRouteContext, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ReminderSettingsCard } from "@/components/reminder-settings-card";
 import {
   Bell,
   Building2,
@@ -233,7 +234,9 @@ function SettingsPage() {
             : "When you select clients, invoices or payments, that context flows directly into your conversation with Haseel."}
         </p>
       </SectionCard>
-
+      
+      <ReminderSettingsCard />
+      
       {/* D. Notifications */}
       <SectionCard
         icon={<Bell className="size-5" />}
