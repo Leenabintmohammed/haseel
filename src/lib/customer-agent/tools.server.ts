@@ -707,7 +707,164 @@ export function createCustomerTools(
             });
           },
       }),
+propose_discount:
+  tool({
+    description:
+      "Propose discount options for an invoice without creating or submitting a request. Use this when the customer asks for a discount generally, asks what discount options are available, asks for suggestions, or wants to compare possible discounts. This tool is read-only.",
 
+    inputSchema:
+      z.object({
+        invoice_reference:
+          z.string().optional(),
+      }),
+
+    execute:
+      async ({
+        invoice_reference,
+      }) => {
+        const result =
+          resolveCustomerInvoice(
+            invoice_reference,
+          );
+
+        if (
+          result.kind ===
+          "none"
+        ) {
+          return {
+            status:
+              "invoice_not_found",
+            invoice_reference:
+              invoice_reference ??
+              null,
+          };
+        }
+
+        if (
+          result.kind ===
+          "ambiguous"
+        ) {
+          return invoiceReferenceResult(
+            result.invoices,
+          );
+        }
+
+        const invoice =
+          result.invoice;
+
+        const remaining =
+          numeric(
+            invoice.remaining_balance,
+          );
+
+        if (
+          remaining <= 0
+        ) {
+          return {
+            status:
+              "invoice_already_paid",
+            invoice_number:
+              invoice.invoice_number,
+          };
+        }
+
+        const status =
+          String(
+            invoice.status ?? "",
+          ).toLowerCase();
+
+        if (
+          [
+            "draft",
+            "paid",
+            "cancelled",
+            "void",
+          ].includes(status)
+        ) {
+          return {
+            status:
+              "invoice_not_receivable",
+            invoice_number:
+              invoice.invoice_number,
+            invoice_status:
+              invoice.status,
+          };
+        }
+
+        const hasPendingRequest =
+          context.discount_requests.some(
+            (request) =>
+              request.invoice_id ===
+                invoice.id &&
+              request.status ===
+                "pending",
+          );
+
+        if (
+          hasPendingRequest
+        ) {
+          return {
+            status:
+              "request_already_pending",
+            invoice_number:
+              invoice.invoice_number,
+          };
+        }
+
+        const percentages =
+          [5, 10, 15];
+
+        const options =
+          percentages.map(
+            (percentage) => {
+              const discountAmount =
+                roundMoney(
+                  (remaining *
+                    percentage) /
+                    100,
+                );
+
+              const estimatedBalance =
+                roundMoney(
+                  Math.max(
+                    0,
+                    remaining -
+                      discountAmount,
+                  ),
+                );
+
+              return {
+                discount_type:
+                  "percentage" as const,
+                discount_percentage:
+                  percentage,
+                discount_amount:
+                  discountAmount,
+                estimated_remaining_balance:
+                  estimatedBalance,
+              };
+            },
+          );
+
+        return {
+          status:
+            "proposals_available",
+          invoice_id:
+            invoice.id,
+          invoice_number:
+            invoice.invoice_number,
+          currency:
+            invoice.currency,
+          remaining_balance:
+            remaining,
+          options,
+          requires_customer_confirmation:
+            true,
+          request_created:
+            false,
+        };
+      },
+  }),
     request_discount:
       tool({
         description:
