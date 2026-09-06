@@ -11,8 +11,9 @@ export function evaluateDiscountPolicy(
     hasPendingRequest: boolean;
   },
 ): PolicyResult {
-  const remaining =
-    Number(invoice.remaining_balance ?? 0);
+  const remaining = Number(
+    invoice.remaining_balance ?? 0,
+  );
 
   if (
     !Number.isFinite(remaining) ||
@@ -26,7 +27,9 @@ export function evaluateDiscountPolicy(
     };
   }
 
-  if (options.hasPendingRequest) {
+  if (
+    options.hasPendingRequest
+  ) {
     return {
       allowed: false,
       code: "request_already_pending",
@@ -59,6 +62,18 @@ export function evaluateDiscountPolicy(
       code: "invalid_discount_amount",
       message:
         "Fixed discount must be greater than zero.",
+    };
+  }
+
+  if (
+    options.discountType === "fixed" &&
+    options.discountValue > remaining
+  ) {
+    return {
+      allowed: false,
+      code: "discount_exceeds_balance",
+      message:
+        "The requested discount cannot exceed the outstanding balance.",
     };
   }
 
