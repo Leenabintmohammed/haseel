@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,13 +21,25 @@ import {
   Filter,
   Search,
   Sparkles,
-  Undo2,
   X,
 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/duely/StatusBadge";
-import { getPaymentWorkspaceFn, type PaymentWorkspaceData } from "@/lib/payment.functions";
+
+import {
+  getPaymentWorkspaceFn,
+  type PaymentWorkspaceData,
+} from "@/lib/payment.functions";
+
+import {
+  approvePaymentPlanRequestFn,
+  getPendingPaymentPlanRequestsFn,
+  rejectPaymentPlanRequestFn,
+  type OwnerPaymentPlanRequest,
+} from "@/lib/payment-plan-request.functions";
+
 import { formatDate, formatMoney } from "@/lib/format";
 import { useDuely } from "@/lib/duely-context";
 import { useI18n } from "@/lib/i18n";
@@ -35,15 +48,24 @@ export const Route = createFileRoute("/_authenticated/payments")({
   head: () => ({
     meta: [
       { title: "Payments — Haseel" },
-      { name: "description", content: "Track collections, payment behavior and receivables." },
+      {
+        name: "description",
+        content:
+          "Track collections, payment behavior and receivables.",
+      },
     ],
   }),
   component: PaymentsPage,
 });
 
 const pageSize = 25;
-const money = (value: number | null | undefined, currency: string, lang: "en" | "ar") =>
-  formatMoney(value, currency, lang);
+
+const money = (
+  value: number | null | undefined,
+  currency: string,
+  lang: "en" | "ar",
+) => formatMoney(value, currency, lang);
+
 const grouped = (
   values: Record<
     string,
@@ -53,23 +75,50 @@ const grouped = (
       overdueReceivables?: number | null;
     }
   >,
-  key: "totalCollected" | "outstandingReceivables" | "overdueReceivables",
+  key:
+    | "totalCollected"
+    | "outstandingReceivables"
+    | "overdueReceivables",
   lang: "en" | "ar",
 ) =>
   Object.entries(values)
-    .map(([currency, summary]) => money(summary[key], currency, lang))
+    .map(([currency, summary]) =>
+      money(summary[key], currency, lang),
+    )
     .join(" · ") || "—";
-const statusOf = (payment: PaymentWorkspaceData["payments"][number]) =>
-  payment.reversed_at ? "reversed" : "recorded";
-const clientName = (data: PaymentWorkspaceData, clientId: string | null) => {
-  const client = data.clients.find((row) => row.id === clientId);
-  return client?.company_name || client?.name || "Unassigned client";
+
+const statusOf = (
+  payment: PaymentWorkspaceData["payments"][number],
+) => (payment.reversed_at ? "reversed" : "recorded");
+
+const clientName = (
+  data: PaymentWorkspaceData,
+  clientId: string | null,
+) => {
+  const client = data.clients.find(
+    (row) => row.id === clientId,
+  );
+
+  return (
+    client?.company_name ||
+    client?.name ||
+    "Unassigned client"
+  );
 };
-const isNestedAction = (target: EventTarget | null) =>
-  target instanceof HTMLElement && Boolean(target.closest("button,a,input,select,textarea"));
+
+const isNestedAction = (
+  target: EventTarget | null,
+) =>
+  target instanceof HTMLElement &&
+  Boolean(
+    target.closest(
+      "button,a,input,select,textarea",
+    ),
+  );
 
 function PaymentsPage() {
   const { lang } = useI18n();
+
   const {
     setPage: setAppPage,
     setFocus,
@@ -79,87 +128,226 @@ function PaymentsPage() {
     toggleSelected,
     setSelection,
   } = useDuely();
+
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
   const query = useQuery({
     queryKey: ["payment_workspace"],
-    queryFn: () => getPaymentWorkspaceFn({ data: { limit: 200 } }),
+    queryFn: () =>
+      getPaymentWorkspaceFn({
+        data: { limit: 200 },
+      }),
   });
+
+  const paymentPlanRequestsQuery = useQuery({
+    queryKey: [
+      "payment_plan_requests",
+      "pending",
+    ],
+    queryFn: () =>
+      getPendingPaymentPlanRequestsFn({
+        data: {},
+      }),
+  });
+
   const data = query.data;
+
   const [search, setSearch] = useState("");
-  const [clientFilter, setClientFilter] = useState("all");
-  const [currency, setCurrency] = useState("all");
-  const [status, setStatus] = useState("all");
-  const [method, setMethod] = useState("all");
+  const [clientFilter, setClientFilter] =
+    useState("all");
+  const [currency, setCurrency] =
+    useState("all");
+  const [status, setStatus] =
+    useState("all");
+  const [method, setMethod] =
+    useState("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [sort, setSort] = useState("date");
   const [page, setPage] = useState(0);
-  const [selectedId, setSelectedId] = useState<string>();
-  useEffect(() => setAppPage("payments"), [setAppPage]);
-  const currencies = data ? [...new Set(data.payments.map((row) => row.currency))] : [];
-  const methods = data
-    ? [...new Set(data.payments.map((row) => row.payment_method).filter(Boolean) as string[])]
+  const [selectedId, setSelectedId] =
+    useState<string>();
+
+  useEffect(
+    () => setAppPage("payments"),
+    [setAppPage],
+  );
+
+  const currencies = data
+    ? [
+        ...new Set(
+          data.payments.map(
+            (row) => row.currency,
+          ),
+        ),
+      ]
     : [];
+
+  const methods = data
+    ? [
+        ...new Set(
+          data.payments
+            .map(
+              (row) =>
+                row.payment_method,
+            )
+            .filter(Boolean) as string[],
+        ),
+      ]
+    : [];
+
   const filtered = useMemo(() => {
     if (!data) return [];
-    const term = search.trim().toLowerCase();
+
+    const term =
+      search.trim().toLowerCase();
+
     return data.payments
       .filter((payment) => {
         const haystack =
-          `${payment.reference ?? ""} ${payment.id} ${clientName(data, payment.client_id)}`.toLowerCase();
+          `${payment.reference ?? ""} ${payment.id} ${clientName(
+            data,
+            payment.client_id,
+          )}`.toLowerCase();
+
         return (
-          (!term || haystack.includes(term)) &&
-          (clientFilter === "all" || payment.client_id === clientFilter) &&
-          (currency === "all" || payment.currency === currency) &&
-          (status === "all" || statusOf(payment) === status) &&
-          (method === "all" || payment.payment_method === method) &&
-          (!from || payment.payment_date >= from) &&
-          (!to || payment.payment_date <= to)
+          (!term ||
+            haystack.includes(term)) &&
+          (clientFilter === "all" ||
+            payment.client_id ===
+              clientFilter) &&
+          (currency === "all" ||
+            payment.currency ===
+              currency) &&
+          (status === "all" ||
+            statusOf(payment) ===
+              status) &&
+          (method === "all" ||
+            payment.payment_method ===
+              method) &&
+          (!from ||
+            payment.payment_date >=
+              from) &&
+          (!to ||
+            payment.payment_date <=
+              to)
         );
       })
       .sort((a, b) =>
         sort === "amount"
-          ? Number(b.amount) - Number(a.amount)
+          ? Number(b.amount) -
+            Number(a.amount)
           : sort === "client"
-            ? clientName(data, a.client_id).localeCompare(clientName(data, b.client_id))
-            : b.payment_date.localeCompare(a.payment_date),
+            ? clientName(
+                data,
+                a.client_id,
+              ).localeCompare(
+                clientName(
+                  data,
+                  b.client_id,
+                ),
+              )
+            : b.payment_date.localeCompare(
+                a.payment_date,
+              ),
       );
-  }, [data, search, clientFilter, currency, status, method, from, to, sort]);
-  const visible = filtered.slice(page * pageSize, (page + 1) * pageSize);
-  const visibleSelection = visible.filter((payment) =>
-    selection.some((item) => item.type === "payment" && item.id === payment.id),
+  }, [
+    data,
+    search,
+    clientFilter,
+    currency,
+    status,
+    method,
+    from,
+    to,
+    sort,
+  ]);
+
+  const visible = filtered.slice(
+    page * pageSize,
+    (page + 1) * pageSize,
   );
-  const allVisibleSelected = visible.length > 0 && visibleSelection.length === visible.length;
+
+  const visibleSelection =
+    visible.filter((payment) =>
+      selection.some(
+        (item) =>
+          item.type === "payment" &&
+          item.id === payment.id,
+      ),
+    );
+
+  const allVisibleSelected =
+    visible.length > 0 &&
+    visibleSelection.length ===
+      visible.length;
+
   const toggleVisible = () => {
     if (allVisibleSelected) {
       setSelection(
         selection.filter(
-          (item) => !(item.type === "payment" && visible.some((payment) => payment.id === item.id)),
+          (item) =>
+            !(
+              item.type ===
+                "payment" &&
+              visible.some(
+                (payment) =>
+                  payment.id ===
+                  item.id,
+              )
+            ),
         ),
       );
-    } else {
-      visible.forEach((payment) => {
-        if (!selection.some((item) => item.type === "payment" && item.id === payment.id)) {
-          toggleSelected({ type: "payment", id: payment.id });
-        }
-      });
+
+      return;
     }
+
+    visible.forEach((payment) => {
+      if (
+        !selection.some(
+          (item) =>
+            item.type === "payment" &&
+            item.id === payment.id,
+        )
+      ) {
+        toggleSelected({
+          type: "payment",
+          id: payment.id,
+        });
+      }
+    });
   };
+
   const ask = (text: string) => {
     setPrefill(text);
     setAiOpen(true);
   };
+
   const selectPayment = (id: string) => {
-    const payment = data?.payments.find((row) => row.id === id);
+    const payment =
+      data?.payments.find(
+        (row) => row.id === id,
+      );
+
     if (!payment) return;
+
     setSelectedId(id);
+
     setFocus({
       type: "payment",
       id,
-      summary: `${money(payment.amount, payment.currency, lang)} · ${clientName(data!, payment.client_id)}`,
+      summary: `${money(
+        payment.amount,
+        payment.currency,
+        lang,
+      )} · ${clientName(
+        data!,
+        payment.client_id,
+      )}`,
     });
   };
+
   const clearFilters = () => {
     setSearch("");
     setClientFilter("all");
@@ -171,155 +359,348 @@ function PaymentsPage() {
     setSort("date");
     setPage(0);
   };
+
   return (
     <div className="space-y-6 p-5 sm:p-7 lg:p-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm text-primary">Collection Center</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Payments &amp; Collections</h1>
+          <p className="text-sm text-primary">
+            Collection Center
+          </p>
+
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+            Payments &amp; Collections
+          </h1>
+
           <p className="mt-1 text-sm text-muted-foreground">
-            Track collections, payment behavior and receivables.
+            Track collections, payment behavior
+            and receivables.
           </p>
         </div>
+
         <div className="flex gap-2">
           <Button
             variant="outline"
             onClick={() => {
-              document.getElementById("payment-search")?.focus();
+              document
+                .getElementById(
+                  "payment-search",
+                )
+                ?.focus();
             }}
           >
-            <Search className="size-4" /> Search
+            <Search className="size-4" />
+            Search
           </Button>
+
           <Button
             variant="outline"
             onClick={() =>
-              document.getElementById("payment-filters")?.scrollIntoView({ behavior: "smooth" })
+              document
+                .getElementById(
+                  "payment-filters",
+                )
+                ?.scrollIntoView({
+                  behavior: "smooth",
+                })
             }
           >
-            <Filter className="size-4" /> Filters
+            <Filter className="size-4" />
+            Filters
           </Button>
+
           <Button
             variant="outline"
             onClick={() => {
-              setPrefill("Record a payment. Ask me for the client, invoice and amount.");
+              setPrefill(
+                "Record a payment. Ask me for the client, invoice and amount.",
+              );
               setAiOpen(true);
             }}
           >
-            <Sparkles className="size-4" /> Ask Haseel
+            <Sparkles className="size-4" />
+            Ask Haseel
           </Button>
         </div>
       </header>
+
       {query.isError ? (
-        <ErrorState onRetry={() => query.refetch()} />
+        <ErrorState
+          onRetry={() => query.refetch()}
+        />
       ) : query.isLoading || !data ? (
         <LoadingState />
       ) : (
         <>
-          <Kpis data={data} lang={lang} />
+          <Kpis
+            data={data}
+            lang={lang}
+          />
+
           <Overview
             data={data}
             lang={lang}
-            currency={currency === "all" ? currencies[0] : currency}
+            currency={
+              currency === "all"
+                ? currencies[0]
+                : currency
+            }
           />
+
+          <PaymentPlanRequests
+            requests={
+              paymentPlanRequestsQuery.data ??
+              []
+            }
+            isLoading={
+              paymentPlanRequestsQuery.isLoading
+            }
+            isError={
+              paymentPlanRequestsQuery.isError
+            }
+            onRefresh={() =>
+              paymentPlanRequestsQuery.refetch()
+            }
+            onResolved={() => {
+              paymentPlanRequestsQuery.refetch();
+
+              queryClient.invalidateQueries({
+                queryKey: [
+                  "payment_workspace",
+                ],
+              });
+            }}
+            lang={lang}
+          />
+
           <Plans
             data={data}
             lang={lang}
             onSelect={(id) => {
-              setFocus({ type: "payment_plan", id, summary: "Payment plan" });
-              toggleSelected({ type: "payment_plan", id });
-              ask("Show me the details and next action for this payment plan.");
+              setFocus({
+                type: "payment_plan",
+                id,
+                summary:
+                  "Payment plan",
+              });
+
+              toggleSelected({
+                type: "payment_plan",
+                id,
+              });
+
+              ask(
+                "Show me the details and next action for this payment plan.",
+              );
             }}
           />
+
           <Signals
             data={data}
             lang={lang}
             onInvoice={(id) => {
-              setFocus({ type: "invoice", id, summary: "Overdue invoice" });
-              navigate({ to: "/invoices" });
+              setFocus({
+                type: "invoice",
+                id,
+                summary:
+                  "Overdue invoice",
+              });
+
+              navigate({
+                to: "/invoices",
+              });
             }}
             onClient={(id) => {
-              setFocus({ type: "client", id, summary: clientName(data, id) });
-              toggleSelected({ type: "client", id });
-              ask(`Summarize ${clientName(data, id)}'s payment behavior and collection exposure.`);
+              setFocus({
+                type: "client",
+                id,
+                summary: clientName(
+                  data,
+                  id,
+                ),
+              });
+
+              toggleSelected({
+                type: "client",
+                id,
+              });
+
+              ask(
+                `Summarize ${clientName(
+                  data,
+                  id,
+                )}'s payment behavior and collection exposure.`,
+              );
             }}
           />
-          <section id="payment-filters" className="space-y-3">
+
+          <section
+            id="payment-filters"
+            className="space-y-3"
+          >
             <div className="flex flex-wrap gap-2 rounded-2xl border border-border bg-card p-3">
               <label className="flex min-w-56 flex-1 items-center gap-2 rounded-lg border border-input px-3 text-sm">
                 <Search className="size-4 text-muted-foreground" />
+
                 <Input
                   id="payment-search"
                   value={search}
                   onChange={(event) => {
-                    setSearch(event.target.value);
+                    setSearch(
+                      event.target.value,
+                    );
                     setPage(0);
                   }}
                   placeholder="Search payment, client or reference"
                   className="h-9 border-0 px-0 shadow-none focus-visible:ring-0"
                 />
               </label>
-              <Select value={clientFilter} onChange={setClientFilter} label="Client">
-                <option value="all">All clients</option>
-                {data.clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.company_name || client.name}
-                  </option>
-                ))}
+
+              <Select
+                value={clientFilter}
+                onChange={setClientFilter}
+                label="Client"
+              >
+                <option value="all">
+                  All clients
+                </option>
+
+                {data.clients.map(
+                  (client) => (
+                    <option
+                      key={client.id}
+                      value={client.id}
+                    >
+                      {client.company_name ||
+                        client.name}
+                    </option>
+                  ),
+                )}
               </Select>
-              <Select value={currency} onChange={setCurrency} label="Currency">
-                <option value="all">All currencies</option>
-                {currencies.map((value) => (
-                  <option key={value}>{value}</option>
-                ))}
+
+              <Select
+                value={currency}
+                onChange={setCurrency}
+                label="Currency"
+              >
+                <option value="all">
+                  All currencies
+                </option>
+
+                {currencies.map(
+                  (value) => (
+                    <option
+                      key={value}
+                    >
+                      {value}
+                    </option>
+                  ),
+                )}
               </Select>
-              <Select value={status} onChange={setStatus} label="Status">
-                <option value="all">All statuses</option>
-                <option value="recorded">Recorded</option>
-                <option value="reversed">Reversed</option>
+
+              <Select
+                value={status}
+                onChange={setStatus}
+                label="Status"
+              >
+                <option value="all">
+                  All statuses
+                </option>
+
+                <option value="recorded">
+                  Recorded
+                </option>
+
+                <option value="reversed">
+                  Reversed
+                </option>
               </Select>
-              <Select value={method} onChange={setMethod} label="Method">
-                <option value="all">All methods</option>
-                {methods.map((value) => (
-                  <option key={value}>{value}</option>
-                ))}
+
+              <Select
+                value={method}
+                onChange={setMethod}
+                label="Method"
+              >
+                <option value="all">
+                  All methods
+                </option>
+
+                {methods.map(
+                  (value) => (
+                    <option
+                      key={value}
+                    >
+                      {value}
+                    </option>
+                  ),
+                )}
               </Select>
+
               <label className="flex items-center gap-2 rounded-lg border border-input px-3 text-xs text-muted-foreground">
                 From{" "}
                 <input
                   type="date"
                   value={from}
-                  onChange={(event) => setFrom(event.target.value)}
+                  onChange={(event) =>
+                    setFrom(
+                      event.target.value,
+                    )
+                  }
                   className="bg-transparent py-2 text-foreground outline-none"
                 />
               </label>
+
               <label className="flex items-center gap-2 rounded-lg border border-input px-3 text-xs text-muted-foreground">
                 To{" "}
                 <input
                   type="date"
                   value={to}
-                  onChange={(event) => setTo(event.target.value)}
+                  onChange={(event) =>
+                    setTo(
+                      event.target.value,
+                    )
+                  }
                   className="bg-transparent py-2 text-foreground outline-none"
                 />
               </label>
-              <Select value={sort} onChange={setSort} label="Sort">
-                <option value="date">Newest</option>
-                <option value="amount">Amount</option>
-                <option value="client">Client</option>
+
+              <Select
+                value={sort}
+                onChange={setSort}
+                label="Sort"
+              >
+                <option value="date">
+                  Newest
+                </option>
+
+                <option value="amount">
+                  Amount
+                </option>
+
+                <option value="client">
+                  Client
+                </option>
               </Select>
+
               {(search ||
-                clientFilter !== "all" ||
+                clientFilter !==
+                  "all" ||
                 currency !== "all" ||
                 status !== "all" ||
                 method !== "all" ||
                 from ||
                 to ||
                 sort !== "date") && (
-                <Button variant="ghost" onClick={clearFilters}>
+                <Button
+                  variant="ghost"
+                  onClick={clearFilters}
+                >
                   Clear
                 </Button>
               )}
             </div>
           </section>
+
           <PaymentLedger
             data={data}
             rows={visible}
@@ -327,68 +708,785 @@ function PaymentsPage() {
             page={page}
             lang={lang}
             selection={selection}
-            allVisibleSelected={allVisibleSelected}
-            onToggleVisible={toggleVisible}
-            onToggle={(id) => toggleSelected({ type: "payment", id })}
+            allVisibleSelected={
+              allVisibleSelected
+            }
+            onToggleVisible={
+              toggleVisible
+            }
+            onToggle={(id) =>
+              toggleSelected({
+                type: "payment",
+                id,
+              })
+            }
             selectedId={selectedId}
             onSelect={selectPayment}
             onPage={setPage}
           />
+
           <Notifications data={data} />
+
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              Showing {visible.length} of {filtered.length} filtered payments. The ledger loads up
-              to 200 recent records.
+              Showing {visible.length} of{" "}
+              {filtered.length} filtered
+              payments. The ledger loads
+              up to 200 recent records.
             </span>
-            {data.payments.length >= 200 && <span>Use date filters to narrow this window.</span>}
+
+            {data.payments.length >=
+              200 && (
+              <span>
+                Use date filters to narrow
+                this window.
+              </span>
+            )}
           </div>
         </>
       )}
+
       {selectedId && data && (
         <PaymentDrawer
           data={data}
           paymentId={selectedId}
           lang={lang}
-          onClose={() => setSelectedId(undefined)}
-          onInvoice={(id) => navigate({ to: "/invoices" })}
+          onClose={() =>
+            setSelectedId(undefined)
+          }
+          onInvoice={() =>
+            navigate({
+              to: "/invoices",
+            })
+          }
           onAsk={ask}
-          onRefresh={() => queryClient.invalidateQueries({ queryKey: ["payment_workspace"] })}
-          onToggleContext={toggleSelected}
+          onRefresh={() =>
+            queryClient.invalidateQueries(
+              {
+                queryKey: [
+                  "payment_workspace",
+                ],
+              },
+            )
+          }
+          onToggleContext={
+            toggleSelected
+          }
         />
       )}
     </div>
   );
 }
 
-function Kpis({ data, lang }: { data: PaymentWorkspaceData; lang: "en" | "ar" }) {
+function PaymentPlanRequests({
+  requests,
+  isLoading,
+  isError,
+  onRefresh,
+  onResolved,
+  lang,
+}: {
+  requests: OwnerPaymentPlanRequest[];
+  isLoading: boolean;
+  isError: boolean;
+  onRefresh: () => void;
+  onResolved: () => void;
+  lang: "en" | "ar";
+}) {
+  const [
+    selectedRequest,
+    setSelectedRequest,
+  ] =
+    useState<OwnerPaymentPlanRequest | null>(
+      null,
+    );
+
+  const [
+    decisionNote,
+    setDecisionNote,
+  ] = useState("");
+
+  const [action, setAction] =
+    useState<
+      "approve" | "reject" | null
+    >(null);
+
+  const totalExposure =
+    requests.reduce(
+      (sum, request) =>
+        sum +
+        Number(
+          request.invoice_remaining_balance ??
+            request.requested_total_amount ??
+            0,
+        ),
+      0,
+    );
+
+  const currencies = [
+    ...new Set(
+      requests.map(
+        (request) =>
+          request.invoice_currency ||
+          "AED",
+      ),
+    ),
+  ];
+
+  const exposureDisplay =
+    currencies.length === 1
+      ? money(
+          totalExposure,
+          currencies[0],
+          lang,
+        )
+      : `${requests.length} requests across ${currencies.length} currencies`;
+
+  const formatRequestedAmount = (
+    request: OwnerPaymentPlanRequest,
+  ) => {
+    const amount =
+      request.invoice_remaining_balance ??
+      request.requested_total_amount ??
+      0;
+
+    return money(
+      Number(amount),
+      request.invoice_currency ||
+        "AED",
+      lang,
+    );
+  };
+
+  const estimatedInstallment = (
+    request: OwnerPaymentPlanRequest,
+  ) => {
+    const amount =
+      request.invoice_remaining_balance ??
+      request.requested_total_amount ??
+      0;
+
+    const count =
+      Number(
+        request.requested_installment_count,
+      ) || 0;
+
+    if (!count) return "—";
+
+    return money(
+      Number(amount) / count,
+      request.invoice_currency ||
+        "AED",
+      lang,
+    );
+  };
+
+  const frequencyLabel = (
+    frequency:
+      | string
+      | null
+      | undefined,
+  ) => {
+    switch (frequency) {
+      case "weekly":
+        return "Weekly";
+
+      case "biweekly":
+        return "Biweekly";
+
+      case "monthly":
+        return "Monthly";
+
+      case "quarterly":
+        return "Quarterly";
+
+      default:
+        return frequency || "—";
+    }
+  };
+
+  const closeDrawer = () => {
+    if (action) return;
+
+    setSelectedRequest(null);
+    setDecisionNote("");
+  };
+
+  const approve = async () => {
+    if (!selectedRequest) return;
+
+    setAction("approve");
+
+    try {
+      await approvePaymentPlanRequestFn({
+        data: {
+          requestId:
+            selectedRequest.id,
+          ownerResponse:
+            decisionNote.trim() ||
+            undefined,
+        },
+      });
+
+      setSelectedRequest(null);
+      setDecisionNote("");
+      setAction(null);
+      onResolved();
+    } catch (error) {
+      console.error(
+        "[Haseel] approve payment plan failed",
+        error,
+      );
+
+      setAction(null);
+    }
+  };
+
+  const reject = async () => {
+    if (!selectedRequest) return;
+
+    setAction("reject");
+
+    try {
+      await rejectPaymentPlanRequestFn({
+        data: {
+          requestId:
+            selectedRequest.id,
+          ownerResponse:
+            decisionNote.trim() ||
+            undefined,
+        },
+      });
+
+      setSelectedRequest(null);
+      setDecisionNote("");
+      setAction(null);
+      onResolved();
+    } catch (error) {
+      console.error(
+        "[Haseel] reject payment plan failed",
+        error,
+      );
+
+      setAction(null);
+    }
+  };
+
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-semibold tracking-tight">
+              Payment Plan Requests
+            </h2>
+
+            {requests.length > 0 && (
+              <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                {requests.length} pending
+              </span>
+            )}
+          </div>
+
+          <p className="mt-1 text-sm text-muted-foreground">
+            Review customer requests before
+            payment plans become active.
+          </p>
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRefresh}
+          disabled={isLoading}
+        >
+          Refresh
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <Kpi
+          label="Pending Requests"
+          value={String(requests.length)}
+          icon={
+            <CreditCard className="size-4" />
+          }
+          hint="Customer payment-plan requests awaiting owner review"
+        />
+
+        <Kpi
+          label="Pending Exposure"
+          value={exposureDisplay}
+          icon={
+            <CircleDollarSign className="size-4" />
+          }
+          hint="Outstanding balances represented by pending payment-plan requests"
+        />
+
+        <Kpi
+          label="Review Queue"
+          value={
+            requests.length
+              ? "Action required"
+              : "Clear"
+          }
+          icon={
+            <CalendarClock className="size-4" />
+          }
+          hint="Requests that require an owner decision"
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          Loading payment plan requests...
+        </div>
+      ) : isError ? (
+        <div className="rounded-2xl border border-destructive/30 bg-card p-8 text-center">
+          <p className="text-sm font-medium">
+            Unable to load payment plan requests.
+          </p>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={onRefresh}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : requests.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
+          <CreditCard className="mx-auto size-8 text-muted-foreground/50" />
+
+          <p className="mt-3 text-sm font-medium">
+            No pending payment plan requests
+          </p>
+
+          <p className="mt-1 text-sm text-muted-foreground">
+            New customer requests will
+            appear here for review.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px]">
+              <thead className="border-b border-border bg-muted/30">
+                <tr className="text-left text-xs font-medium text-muted-foreground">
+                  <th className="px-4 py-3">
+                    Customer
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Invoice
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Balance
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Plan
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Est. Payment
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Start Date
+                  </th>
+
+                  <th className="px-4 py-3">
+                    Status
+                  </th>
+
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-border">
+                {requests.map(
+                  (request) => (
+                    <tr
+                      key={request.id}
+                      className="transition-colors hover:bg-muted/20"
+                    >
+                      <td className="px-4 py-4">
+                        <div>
+                          <p className="font-medium">
+                            {request.client_name ||
+                              "Unknown customer"}
+                          </p>
+
+                          {request.client_phone && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {
+                                request.client_phone
+                              }
+                            </p>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <div>
+                          <p className="font-medium">
+                            {request.invoice_number ||
+                              "Invoice"}
+                          </p>
+
+                          {request.invoice_amount !=
+                            null && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              Original{" "}
+                              {money(
+                                Number(
+                                  request.invoice_amount,
+                                ),
+                                request.invoice_currency ||
+                                  "AED",
+                                lang,
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-4 font-medium">
+                        {formatRequestedAmount(
+                          request,
+                        )}
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <div>
+                          <p className="font-medium">
+                            {
+                              request.requested_installment_count
+                            }{" "}
+                            payments
+                          </p>
+
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {frequencyLabel(
+                              request.requested_frequency,
+                            )}
+                          </p>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-4 font-medium">
+                        {estimatedInstallment(
+                          request,
+                        )}
+                      </td>
+
+                      <td className="px-4 py-4 text-xs text-muted-foreground">
+                        {request.requested_start_date
+                          ? formatDate(
+                              request.requested_start_date,
+                              lang,
+                            )
+                          : "Not specified"}
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <StatusBadge status="pending" />
+                      </td>
+
+                      <td className="px-4 py-4 text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedRequest(
+                              request,
+                            );
+                            setDecisionNote("");
+                          }}
+                        >
+                          Review
+                          <ChevronRight className="ml-1 size-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {selectedRequest && (
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            aria-label="Close"
+            className="absolute inset-0 bg-black/30 backdrop-blur-[1px]"
+            onClick={closeDrawer}
+          />
+
+          <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-border bg-background shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Payment Plan Review
+                </p>
+
+                <h3 className="mt-1 text-lg font-semibold">
+                  {selectedRequest.client_name ||
+                    "Customer"}
+                </h3>
+              </div>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={Boolean(action)}
+                onClick={closeDrawer}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+
+            <div className="duely-scroll flex-1 space-y-5 overflow-y-auto p-5">
+              <DetailSection title="Invoice">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      Invoice number
+                    </p>
+
+                    <p className="mt-1 font-semibold">
+                      {selectedRequest.invoice_number ||
+                        "Invoice"}
+                    </p>
+                  </div>
+
+                  <StatusBadge status="pending" />
+                </div>
+
+                <div className="mt-4">
+                  <DetailGrid
+                    rows={[
+                      [
+                        "Outstanding balance",
+                        formatRequestedAmount(
+                          selectedRequest,
+                        ),
+                      ],
+                      [
+                        "Original amount",
+                        selectedRequest.invoice_amount ==
+                        null
+                          ? "—"
+                          : money(
+                              Number(
+                                selectedRequest.invoice_amount,
+                              ),
+                              selectedRequest.invoice_currency ||
+                                "AED",
+                              lang,
+                            ),
+                      ],
+                    ]}
+                  />
+                </div>
+              </DetailSection>
+
+              <DetailSection title="Requested plan">
+                <DetailGrid
+                  rows={[
+                    [
+                      "Installments",
+                      String(
+                        selectedRequest.requested_installment_count,
+                      ),
+                    ],
+                    [
+                      "Frequency",
+                      frequencyLabel(
+                        selectedRequest.requested_frequency,
+                      ),
+                    ],
+                    [
+                      "Estimated payment",
+                      estimatedInstallment(
+                        selectedRequest,
+                      ),
+                    ],
+                    [
+                      "Start date",
+                      selectedRequest.requested_start_date
+                        ? formatDate(
+                            selectedRequest.requested_start_date,
+                            lang,
+                          )
+                        : "Not specified",
+                    ],
+                  ]}
+                />
+              </DetailSection>
+
+              <DetailSection title="Customer">
+                <DetailGrid
+                  rows={[
+                    [
+                      "Name",
+                      selectedRequest.client_name ||
+                        "—",
+                    ],
+                    [
+                      "Phone",
+                      selectedRequest.client_phone ||
+                        "—",
+                    ],
+                  ]}
+                />
+              </DetailSection>
+
+              <DetailSection title="Customer reason">
+                <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                  {selectedRequest.reason?.trim() ||
+                    "No reason provided."}
+                </p>
+              </DetailSection>
+
+              <DetailSection title="Review decision">
+                <label className="text-sm font-medium">
+                  Owner response
+                </label>
+
+                <textarea
+                  value={decisionNote}
+                  onChange={(event) =>
+                    setDecisionNote(
+                      event.target.value,
+                    )
+                  }
+                  disabled={Boolean(action)}
+                  placeholder="Optional note to include with the decision..."
+                  className="mt-2 min-h-28 w-full rounded-xl border border-input bg-background px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </DetailSection>
+            </div>
+
+            <div className="border-t border-border bg-background p-5">
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  disabled={Boolean(action)}
+                  onClick={reject}
+                >
+                  <X className="size-4" />
+
+                  {action === "reject"
+                    ? "Rejecting..."
+                    : "Reject"}
+                </Button>
+
+                <Button
+                  className="flex-1"
+                  disabled={Boolean(action)}
+                  onClick={approve}
+                >
+                  <Check className="size-4" />
+
+                  {action === "approve"
+                    ? "Approving..."
+                    : "Approve Plan"}
+                </Button>
+              </div>
+
+              <p className="mt-3 text-center text-xs text-muted-foreground">
+                Approval will create the active
+                payment plan and its installments.
+              </p>
+            </div>
+          </aside>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Kpis({
+  data,
+  lang,
+}: {
+  data: PaymentWorkspaceData;
+  lang: "en" | "ar";
+}) {
   const summary = data.analytics;
-  const breakdown = summary.currencyBreakdown;
-  const currencies = Object.keys(breakdown);
-  const single = currencies.length === 1 ? currencies[0] : null;
+  const breakdown =
+    summary.currencyBreakdown;
+
+  const currencies =
+    Object.keys(breakdown);
+
+  const single =
+    currencies.length === 1
+      ? currencies[0]
+      : null;
+
   const average =
-    single && summary.collections.averagePayment.value !== null
-      ? money(summary.collections.averagePayment.value, single, lang)
+    single &&
+    summary.collections.averagePayment
+      .value !== null
+      ? money(
+          summary.collections
+            .averagePayment.value,
+          single,
+          lang,
+        )
       : "—";
+
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       <Kpi
         label="Total Collected"
-        value={grouped(breakdown, "totalCollected", lang)}
-        icon={<Check className="size-4" />}
+        value={grouped(
+          breakdown,
+          "totalCollected",
+          lang,
+        )}
+        icon={
+          <Check className="size-4" />
+        }
         hint="Live payments grouped by currency"
       />
+
       <Kpi
         label="Outstanding"
-        value={grouped(breakdown, "outstandingReceivables", lang)}
-        icon={<CircleDollarSign className="size-4" />}
+        value={grouped(
+          breakdown,
+          "outstandingReceivables",
+          lang,
+        )}
+        icon={
+          <CircleDollarSign className="size-4" />
+        }
         hint="Open receivables grouped by currency"
       />
+
       <Kpi
         label="Overdue"
-        value={grouped(breakdown, "overdueReceivables", lang)}
-        icon={<CalendarClock className="size-4" />}
+        value={grouped(
+          breakdown,
+          "overdueReceivables",
+          lang,
+        )}
+        icon={
+          <CalendarClock className="size-4" />
+        }
         hint="Past-due open receivables grouped by currency"
       />
+
       <Kpi
         label="Collection Rate"
         value={
@@ -396,37 +1494,53 @@ function Kpis({ data, lang }: { data: PaymentWorkspaceData; lang: "en" | "ar" })
             ? currencies
                 .map(
                   (currency) =>
-                    `${currency} ${((breakdown[currency]?.collectionRate ?? 0) * 100).toFixed(0)}%`,
+                    `${currency} ${(
+                      (breakdown[
+                        currency
+                      ]?.collectionRate ??
+                        0) * 100
+                    ).toFixed(0)}%`,
                 )
                 .join(" · ")
             : "—"
         }
-        icon={<CircleDollarSign className="size-4" />}
+        icon={
+          <CircleDollarSign className="size-4" />
+        }
         hint="Calculated independently for each currency"
       />
+
       <Kpi
         label="Average Payment"
         value={average}
-        icon={<CreditCard className="size-4" />}
+        icon={
+          <CreditCard className="size-4" />
+        }
         hint={
           single
             ? "Authoritative average for the only currency in this workspace"
             : "Unavailable across multiple currencies"
         }
       />
+
       <Kpi
         label="On-Time Rate"
         value={
-          summary.collections.onTimePaymentRate.value === null
+          summary.collections
+            .onTimePaymentRate
+            .value === null
             ? "—"
             : `${summary.collections.onTimePaymentRate.value}%`
         }
-        icon={<Check className="size-4" />}
+        icon={
+          <Check className="size-4" />
+        }
         hint="Based on payments matched to invoices"
       />
     </div>
   );
 }
+
 function Kpi({
   label,
   value,
@@ -439,12 +1553,23 @@ function Kpi({
   hint: string;
 }) {
   return (
-    <div title={hint} className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm">
+    <div
+      title={hint}
+      className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm"
+    >
       <div className="flex justify-between gap-2 text-xs text-muted-foreground">
-        <span className="truncate">{label}</span>
-        <span className="text-primary">{icon}</span>
+        <span className="truncate">
+          {label}
+        </span>
+
+        <span className="text-primary">
+          {icon}
+        </span>
       </div>
-      <p className="mt-3 truncate text-lg font-semibold">{value}</p>
+
+      <p className="mt-3 truncate text-lg font-semibold">
+        {value}
+      </p>
     </div>
   );
 }
@@ -458,48 +1583,92 @@ function Overview({
   lang: "en" | "ar";
   currency?: string | undefined;
 }) {
-  const analytics = currency ? data.currencyAnalytics[currency] : undefined;
-  const trend = analytics?.trends.last90Days ?? [];
-  const distribution = analytics?.summary;
+  const analytics = currency
+    ? data.currencyAnalytics[
+        currency
+      ]
+    : undefined;
+
+  const trend =
+    analytics?.trends.last90Days ??
+    [];
+
+  const distribution =
+    analytics?.summary;
+
   return (
     <section className="grid gap-4 xl:grid-cols-[1.65fr_1fr]">
       <div className="rounded-2xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="font-semibold">Collection overview</h2>
+            <h2 className="font-semibold">
+              Collection overview
+            </h2>
+
             <p className="mt-1 text-xs text-muted-foreground">
               {currency
                 ? `90-day view · ${currency}`
                 : "Select one currency to view a comparable trend."}
             </p>
           </div>
+
           {currency && (
             <span className="rounded-full bg-primary-soft px-2.5 py-1 text-xs text-primary">
               {currency}
             </span>
           )}
         </div>
+
         {trend.length ? (
           <div className="mt-4 h-56">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+            >
               <AreaChart data={trend}>
-                <CartesianGrid stroke="rgba(255,255,255,.08)" vertical={false} />
-                <XAxis dataKey="period" tick={{ fill: "#9ca9a1", fontSize: 10 }} />
-                <YAxis
-                  tick={{ fill: "#9ca9a1", fontSize: 10 }}
-                  tickFormatter={(value) => `${currency} ${value}`}
+                <CartesianGrid
+                  stroke="rgba(255,255,255,.08)"
+                  vertical={false}
                 />
+
+                <XAxis
+                  dataKey="period"
+                  tick={{
+                    fill: "#9ca9a1",
+                    fontSize: 10,
+                  }}
+                />
+
+                <YAxis
+                  tick={{
+                    fill: "#9ca9a1",
+                    fontSize: 10,
+                  }}
+                  tickFormatter={(value) =>
+                    `${currency} ${value}`
+                  }
+                />
+
                 <Tooltip
                   contentStyle={{
-                    background: "#1d2924",
-                    border: "1px solid rgba(255,255,255,.12)",
+                    background:
+                      "#1d2924",
+                    border:
+                      "1px solid rgba(255,255,255,.12)",
                     borderRadius: 12,
                   }}
                   formatter={(value) => [
-                    money(Number(value ?? 0), currency ?? "", lang),
+                    money(
+                      Number(
+                        value ?? 0,
+                      ),
+                      currency ?? "",
+                      lang,
+                    ),
                     "Collected",
                   ]}
                 />
+
                 <Area
                   type="monotone"
                   dataKey="collected"
@@ -512,34 +1681,57 @@ function Overview({
           </div>
         ) : (
           <Empty
-            icon={<CircleDollarSign className="size-7" />}
+            icon={
+              <CircleDollarSign className="size-7" />
+            }
             title="No collection history yet"
             text="Recorded payments will appear here once there is enough real history for a trend."
           />
         )}
       </div>
+
       <div className="rounded-2xl border border-border bg-card p-4">
-        <h2 className="font-semibold">Collection distribution</h2>
+        <h2 className="font-semibold">
+          Collection distribution
+        </h2>
+
         {distribution && currency ? (
           <div className="mt-5 space-y-4">
             <Distribution
               label="Collected"
-              value={money(distribution.totalCollected, currency, lang)}
+              value={money(
+                distribution.totalCollected,
+                currency,
+                lang,
+              )}
               color="bg-primary"
             />
+
             <Distribution
               label="Outstanding"
-              value={money(distribution.outstandingReceivables, currency, lang)}
+              value={money(
+                distribution.outstandingReceivables,
+                currency,
+                lang,
+              )}
               color="bg-info"
             />
+
             <Distribution
               label="Overdue"
-              value={money(distribution.overdueReceivables, currency, lang)}
+              value={money(
+                distribution.overdueReceivables,
+                currency,
+                lang,
+              )}
               color="bg-warning"
             />
+
             <p className="pt-2 text-xs text-muted-foreground">
-              Amounts are shown for {currency} only. Other currencies remain separate in the KPI
-              row.
+              Amounts are shown for{" "}
+              {currency} only. Other
+              currencies remain separate in
+              the KPI row.
             </p>
           </div>
         ) : (
@@ -552,14 +1744,31 @@ function Overview({
     </section>
   );
 }
-function Distribution({ label, value, color }: { label: string; value: string; color: string }) {
+
+function Distribution({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: string;
+}) {
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2">
-        <span className={`size-2 rounded-full ${color}`} />
-        <span className="text-sm">{label}</span>
+        <span
+          className={`size-2 rounded-full ${color}`}
+        />
+
+        <span className="text-sm">
+          {label}
+        </span>
       </div>
-      <span className="truncate text-sm font-medium">{value}</span>
+
+      <span className="truncate text-sm font-medium">
+        {value}
+      </span>
     </div>
   );
 }
@@ -573,43 +1782,98 @@ function Plans({
   lang: "en" | "ar";
   onSelect: (id: string) => void;
 }) {
-  const plans = data.plans.filter((plan) => ["active", "at_risk", "paused"].includes(plan.status));
-  const installments = plans.flatMap((plan) => plan.payment_plan_installments ?? []);
+  const plans = data.plans.filter(
+    (plan) =>
+      [
+        "active",
+        "at_risk",
+        "paused",
+      ].includes(plan.status),
+  );
+
+  const installments =
+    plans.flatMap(
+      (plan) =>
+        plan.payment_plan_installments ??
+        [],
+    );
+
   const upcoming = installments
-    .filter((row) => row.status !== "paid" && row.due_date >= new Date().toISOString().slice(0, 10))
-    .sort((a, b) => a.due_date.localeCompare(b.due_date))
+    .filter(
+      (row) =>
+        row.status !== "paid" &&
+        row.due_date >=
+          new Date()
+            .toISOString()
+            .slice(0, 10),
+    )
+    .sort((a, b) =>
+      a.due_date.localeCompare(
+        b.due_date,
+      ),
+    )
     .slice(0, 4);
+
   return (
     <section className="rounded-2xl border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold">Payment plans</h2>
+          <h2 className="font-semibold">
+            Payment plans
+          </h2>
+
           <p className="mt-1 text-xs text-muted-foreground">
-            Active arrangements and upcoming collection commitments.
+            Active arrangements and upcoming
+            collection commitments.
           </p>
         </div>
-        <span className="text-xs text-muted-foreground">{plans.length} active</span>
+
+        <span className="text-xs text-muted-foreground">
+          {plans.length} active
+        </span>
       </div>
+
       {plans.length ? (
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
-          {plans.slice(0, 6).map((plan) => (
-            <button
-              key={plan.id}
-              onClick={() => onSelect(plan.id)}
-              className="min-w-0 rounded-xl border border-border bg-secondary/30 p-3 text-left hover:border-primary/50"
-            >
-              <div className="flex justify-between gap-3">
-                <span className="truncate font-medium">{clientName(data, plan.client_id)}</span>
-                <StatusBadge status={plan.status} />
-              </div>
-              <p className="mt-2 truncate text-sm">
-                {money(plan.remaining_amount, plan.currency, lang)} remaining
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {plan.installment_count} installments · {plan.frequency}
-              </p>
-            </button>
-          ))}
+          {plans
+            .slice(0, 6)
+            .map((plan) => (
+              <button
+                key={plan.id}
+                onClick={() =>
+                  onSelect(plan.id)
+                }
+                className="min-w-0 rounded-xl border border-border bg-secondary/30 p-3 text-left hover:border-primary/50"
+              >
+                <div className="flex justify-between gap-3">
+                  <span className="truncate font-medium">
+                    {clientName(
+                      data,
+                      plan.client_id,
+                    )}
+                  </span>
+
+                  <StatusBadge
+                    status={plan.status}
+                  />
+                </div>
+
+                <p className="mt-2 truncate text-sm">
+                  {money(
+                    plan.remaining_amount,
+                    plan.currency,
+                    lang,
+                  )}{" "}
+                  remaining
+                </p>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {plan.installment_count}{" "}
+                  installments ·{" "}
+                  {plan.frequency}
+                </p>
+              </button>
+            ))}
         </div>
       ) : (
         <Empty
@@ -617,30 +1881,62 @@ function Plans({
           text="Create a plan through Haseel when a client needs a structured way to settle an outstanding invoice."
         />
       )}
+
       {upcoming.length ? (
         <div className="mt-4 border-t border-border pt-3">
-          <p className="text-xs font-medium text-muted-foreground">Upcoming installments</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            Upcoming installments
+          </p>
+
           <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {upcoming.map((installment) => {
-              const plan = plans.find((row) => row.id === installment.plan_id);
-              return (
-                <div key={installment.id} className="min-w-0 text-xs">
-                  <p className="truncate">
-                    {plan ? clientName(data, plan.client_id) : "Payment plan"}
-                  </p>
-                  <p className="text-muted-foreground">
-                    {formatDate(installment.due_date, lang)} ·{" "}
-                    {plan
-                      ? money(
-                          Number(installment.amount) - Number(installment.paid_amount),
-                          plan.currency,
-                          lang,
-                        )
-                      : "—"}
-                  </p>
-                </div>
-              );
-            })}
+            {upcoming.map(
+              (installment) => {
+                const plan =
+                  plans.find(
+                    (row) =>
+                      row.id ===
+                      installment.plan_id,
+                  );
+
+                return (
+                  <div
+                    key={
+                      installment.id
+                    }
+                    className="min-w-0 text-xs"
+                  >
+                    <p className="truncate">
+                      {plan
+                        ? clientName(
+                            data,
+                            plan.client_id,
+                          )
+                        : "Payment plan"}
+                    </p>
+
+                    <p className="text-muted-foreground">
+                      {formatDate(
+                        installment.due_date,
+                        lang,
+                      )}{" "}
+                      ·{" "}
+                      {plan
+                        ? money(
+                            Number(
+                              installment.amount,
+                            ) -
+                              Number(
+                                installment.paid_amount,
+                              ),
+                            plan.currency,
+                            lang,
+                          )
+                        : "—"}
+                    </p>
+                  </div>
+                );
+              },
+            )}
           </div>
         </div>
       ) : null}
@@ -660,52 +1956,108 @@ function Signals({
   onClient: (id: string) => void;
 }) {
   const analytics = data.analytics;
+
   return (
     <section className="grid gap-4 lg:grid-cols-3">
       <Signal
         title="Overdue invoices"
-        icon={<CalendarClock className="size-4" />}
+        icon={
+          <CalendarClock className="size-4" />
+        }
         empty="No overdue invoices need attention."
-        items={analytics.overdueInvoices.slice(0, 4).map((item) => ({
-          id: item.id,
-          title: item.invoiceNumber,
-          detail: `${item.clientName} · ${item.daysOverdue} days overdue`,
-          amount: String(item.outstandingAmount),
-          currency: data.invoices.find((invoice) => invoice.id === item.id)?.currency ?? "AED",
-          onClick: () => onInvoice(item.id),
-        }))}
+        items={analytics.overdueInvoices
+          .slice(0, 4)
+          .map((item) => ({
+            id: item.id,
+            title: item.invoiceNumber,
+            detail: `${item.clientName} · ${item.daysOverdue} days overdue`,
+            amount: String(
+              item.outstandingAmount,
+            ),
+            currency:
+              data.invoices.find(
+                (invoice) =>
+                  invoice.id ===
+                  item.id,
+              )?.currency ??
+              "AED",
+            onClick: () =>
+              onInvoice(item.id),
+          }))}
         lang={lang}
       />
+
       <Signal
         title="High exposure clients"
-        icon={<CircleDollarSign className="size-4" />}
+        icon={
+          <CircleDollarSign className="size-4" />
+        }
         empty="No elevated exposure signals are available."
-        items={analytics.atRiskClients.slice(0, 4).map((item) => ({
-          id: item.clientId,
-          title: item.clientName,
-          detail: `${item.riskLevel} risk · ${item.factors[0] ?? "Existing risk signal"}`,
-          amount: String(item.outstandingExposure),
-          currency:
-            data.invoices.find((invoice) => invoice.client_id === item.clientId)?.currency ?? "AED",
-          onClick: () => onClient(item.clientId),
-        }))}
+        items={analytics.atRiskClients
+          .slice(0, 4)
+          .map((item) => ({
+            id: item.clientId,
+            title: item.clientName,
+            detail: `${item.riskLevel} risk · ${
+              item.factors[0] ??
+              "Existing risk signal"
+            }`,
+            amount: String(
+              item.outstandingExposure,
+            ),
+            currency:
+              data.invoices.find(
+                (invoice) =>
+                  invoice.client_id ===
+                  item.clientId,
+              )?.currency ??
+              "AED",
+            onClick: () =>
+              onClient(
+                item.clientId,
+              ),
+          }))}
         lang={lang}
       />
+
       <Signal
         title="Installments needing attention"
-        icon={<CreditCard className="size-4" />}
+        icon={
+          <CreditCard className="size-4" />
+        }
         empty="No installment alerts are currently available."
         items={data.plans
           .flatMap((plan) =>
-            (plan.payment_plan_installments ?? [])
-              .filter((row) => row.status === "overdue")
+            (
+              plan.payment_plan_installments ??
+              []
+            )
+              .filter(
+                (row) =>
+                  row.status ===
+                  "overdue",
+              )
               .map((row) => ({
                 id: plan.id,
-                title: clientName(data, plan.client_id),
+                title: clientName(
+                  data,
+                  plan.client_id,
+                ),
                 detail: `Installment ${row.seq} · ${row.status}`,
-                amount: String(Number(row.amount) - Number(row.paid_amount)),
-                currency: plan.currency,
-                onClick: () => onClient(plan.client_id),
+                amount: String(
+                  Number(
+                    row.amount,
+                  ) -
+                    Number(
+                      row.paid_amount,
+                    ),
+                ),
+                currency:
+                  plan.currency,
+                onClick: () =>
+                  onClient(
+                    plan.client_id,
+                  ),
               })),
           )
           .slice(0, 4)}
@@ -714,12 +2066,12 @@ function Signals({
     </section>
   );
 }
+
 function Signal({
   title,
   icon,
   empty,
   items,
-  lang,
 }: {
   title: string;
   icon: ReactNode;
@@ -737,9 +2089,15 @@ function Signal({
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
       <div className="flex items-center gap-2">
-        <span className="text-primary">{icon}</span>
-        <h2 className="font-semibold">{title}</h2>
+        <span className="text-primary">
+          {icon}
+        </span>
+
+        <h2 className="font-semibold">
+          {title}
+        </h2>
       </div>
+
       {items.length ? (
         <div className="mt-3 space-y-3">
           {items.map((item) => (
@@ -749,17 +2107,31 @@ function Signal({
               className="flex w-full min-w-0 items-center justify-between gap-3 text-left"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{item.title}</p>
-                <p className="truncate text-xs text-muted-foreground">{item.detail}</p>
+                <p className="truncate text-sm font-medium">
+                  {item.title}
+                </p>
+
+                <p className="truncate text-xs text-muted-foreground">
+                  {item.detail}
+                </p>
               </div>
+
               <span className="shrink-0 text-xs font-medium">
-                {money(Number(item.amount), item.currency, lang)}
+                {money(
+                  Number(
+                    item.amount,
+                  ),
+                  item.currency,
+                  "en",
+                )}
               </span>
             </button>
           ))}
         </div>
       ) : (
-        <p className="mt-3 text-sm text-muted-foreground">{empty}</p>
+        <p className="mt-3 text-sm text-muted-foreground">
+          {empty}
+        </p>
       )}
     </div>
   );
@@ -787,7 +2159,10 @@ function PaymentLedger({
   selectedId?: string | undefined;
   onSelect: (id: string) => void;
   onPage: (page: number) => void;
-  selection: { type: string; id: string }[];
+  selection: {
+    type: string;
+    id: string;
+  }[];
   allVisibleSelected: boolean;
   onToggleVisible: () => void;
   onToggle: (id: string) => void;
@@ -796,25 +2171,41 @@ function PaymentLedger({
     <section className="overflow-hidden rounded-2xl border border-border bg-card">
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-4">
         <div>
-          <h2 className="font-semibold">Payment ledger</h2>
+          <h2 className="font-semibold">
+            Payment ledger
+          </h2>
+
           <p className="mt-1 text-xs text-muted-foreground">
-            Recorded money in, including reversed entries for audit visibility.
+            Recorded money in, including
+            reversed entries for audit
+            visibility.
           </p>
         </div>
+
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">{total} results</span>
+          <span className="text-xs text-muted-foreground">
+            {total} results
+          </span>
+
           <Button
             size="sm"
             variant="ghost"
-            onClick={onToggleVisible}
+            onClick={
+              onToggleVisible
+            }
             aria-label={
-              allVisibleSelected ? "Clear visible payment selection" : "Select all visible payments"
+              allVisibleSelected
+                ? "Clear visible payment selection"
+                : "Select all visible payments"
             }
           >
-            {allVisibleSelected ? "Clear visible" : "Select all visible"}
+            {allVisibleSelected
+              ? "Clear visible"
+              : "Select all visible"}
           </Button>
         </div>
       </div>
+
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1050px] text-sm">
           <thead className="border-b border-border bg-secondary/30 text-left text-xs text-muted-foreground">
@@ -830,79 +2221,177 @@ function PaymentLedger({
                 "Status",
                 "Reference",
                 "Actions",
-              ].map((heading) => (
-                <th key={heading} className="whitespace-nowrap px-4 py-3 font-medium">
-                  {heading}
-                </th>
-              ))}
+              ].map(
+                (heading) => (
+                  <th
+                    key={heading}
+                    className="whitespace-nowrap px-4 py-3 font-medium"
+                  >
+                    {heading}
+                  </th>
+                ),
+              )}
             </tr>
           </thead>
+
           <tbody className="divide-y divide-border">
             {rows.map((payment) => {
-              const invoice = data.invoices.find((row) => row.id === payment.invoice_id);
+              const invoice =
+                data.invoices.find(
+                  (row) =>
+                    row.id ===
+                    payment.invoice_id,
+                );
+
+              const selected =
+                selection.some(
+                  (item) =>
+                    item.type ===
+                      "payment" &&
+                    item.id ===
+                      payment.id,
+                );
+
               return (
                 <tr
                   key={payment.id}
                   role="row"
                   tabIndex={0}
-                  aria-selected={selection.some(
-                    (item) => item.type === "payment" && item.id === payment.id,
-                  )}
+                  aria-selected={
+                    selected
+                  }
                   onClick={(event) => {
-                    if (!isNestedAction(event.target)) onToggle(payment.id);
+                    if (
+                      !isNestedAction(
+                        event.target,
+                      )
+                    ) {
+                      onToggle(
+                        payment.id,
+                      );
+                    }
                   }}
                   onKeyDown={(event) => {
                     if (
-                      (event.key === "Enter" || event.key === " ") &&
-                      !isNestedAction(event.target)
+                      (
+                        event.key ===
+                          "Enter" ||
+                        event.key ===
+                          " "
+                      ) &&
+                      !isNestedAction(
+                        event.target,
+                      )
                     ) {
                       event.preventDefault();
-                      onToggle(payment.id);
+                      onToggle(
+                        payment.id,
+                      );
                     }
                   }}
-                  className={`${selection.some((item) => item.type === "payment" && item.id === payment.id) ? "border-s-2 border-primary bg-primary-soft/30" : "border-s-2 border-transparent hover:bg-secondary/20"} ${selectedId === payment.id ? "ring-1 ring-primary/20" : ""}`}
+                  className={`${
+                    selected
+                      ? "border-s-2 border-primary bg-primary-soft/30"
+                      : "border-s-2 border-transparent hover:bg-secondary/20"
+                  } ${
+                    selectedId ===
+                    payment.id
+                      ? "ring-1 ring-primary/20"
+                      : ""
+                  }`}
                 >
                   <td className="max-w-36 px-4 py-4">
                     <button
-                      onClick={() => onSelect(payment.id)}
-                      title={payment.reference ?? payment.id}
+                      onClick={() =>
+                        onSelect(
+                          payment.id,
+                        )
+                      }
+                      title={
+                        payment.reference ??
+                        payment.id
+                      }
                       className="block max-w-36 truncate text-left font-medium"
                     >
-                      {payment.reference || payment.id.slice(0, 8)}
+                      {payment.reference ||
+                        payment.id.slice(
+                          0,
+                          8,
+                        )}
                     </button>
                   </td>
+
                   <td className="max-w-40 px-4">
-                    <span className="block truncate">{clientName(data, payment.client_id)}</span>
+                    <span className="block truncate">
+                      {clientName(
+                        data,
+                        payment.client_id,
+                      )}
+                    </span>
                   </td>
-                  <td className="px-4">{invoice?.invoice_number ?? "Unlinked"}</td>
+
+                  <td className="px-4">
+                    {invoice?.invoice_number ??
+                      "Unlinked"}
+                  </td>
+
                   <td className="whitespace-nowrap px-4 font-medium text-success">
-                    {money(payment.amount, payment.currency, lang)}
+                    {money(
+                      payment.amount,
+                      payment.currency,
+                      lang,
+                    )}
                   </td>
+
                   <td className="px-4">
                     <span className="rounded-full bg-secondary px-2 py-1 text-xs">
                       {payment.currency}
                     </span>
                   </td>
+
                   <td className="whitespace-nowrap px-4 text-xs text-muted-foreground">
-                    {formatDate(payment.payment_date, lang)}
+                    {formatDate(
+                      payment.payment_date,
+                      lang,
+                    )}
                   </td>
+
                   <td className="px-4 text-xs text-muted-foreground">
-                    {payment.payment_method || "—"}
+                    {payment.payment_method ||
+                      "—"}
                   </td>
+
                   <td className="px-4">
-                    <StatusBadge status={statusOf(payment)} />
+                    <StatusBadge
+                      status={statusOf(
+                        payment,
+                      )}
+                    />
                   </td>
+
                   <td className="max-w-36 px-4">
-                    <span className="block truncate" title={payment.reference ?? undefined}>
-                      {payment.reference ?? "—"}
+                    <span
+                      className="block truncate"
+                      title={
+                        payment.reference ??
+                        undefined
+                      }
+                    >
+                      {payment.reference ??
+                        "—"}
                     </span>
                   </td>
+
                   <td className="px-4">
                     <Button
                       size="icon"
                       variant="ghost"
                       title="Open payment details"
-                      onClick={() => onSelect(payment.id)}
+                      onClick={() =>
+                        onSelect(
+                          payment.id,
+                        )
+                      }
                     >
                       <ChevronRight className="size-4" />
                     </Button>
@@ -913,30 +2402,48 @@ function PaymentLedger({
           </tbody>
         </table>
       </div>
+
       {!rows.length && (
         <Empty
           title="No payments match these filters"
           text="Adjust the search or filters, or record a payment against an eligible invoice."
         />
       )}
+
       <div className="flex items-center justify-between border-t border-border px-4 py-3">
         <span className="text-xs text-muted-foreground">
-          Page {page + 1} of {Math.max(1, Math.ceil(total / pageSize))}
+          Page {page + 1} of{" "}
+          {Math.max(
+            1,
+            Math.ceil(
+              total / pageSize,
+            ),
+          )}
         </span>
+
         <div className="flex gap-2">
           <Button
             size="sm"
             variant="outline"
             disabled={page === 0}
-            onClick={() => onPage(page - 1)}
+            onClick={() =>
+              onPage(page - 1)
+            }
           >
             Previous
           </Button>
+
           <Button
             size="sm"
             variant="outline"
-            disabled={(page + 1) * pageSize >= total}
-            onClick={() => onPage(page + 1)}
+            disabled={
+              (page + 1) *
+                pageSize >=
+              total
+            }
+            onClick={() =>
+              onPage(page + 1)
+            }
           >
             Next
           </Button>
@@ -953,7 +2460,6 @@ function PaymentDrawer({
   onClose,
   onInvoice,
   onAsk,
-  onRefresh,
   onToggleContext,
 }: {
   data: PaymentWorkspaceData;
@@ -964,156 +2470,352 @@ function PaymentDrawer({
   onAsk: (text: string) => void;
   onRefresh: () => void;
   onToggleContext: (selection: {
-    type: "payment" | "invoice" | "client" | "payment_plan";
+    type:
+      | "payment"
+      | "invoice"
+      | "client"
+      | "payment_plan";
     id: string;
   }) => void;
 }) {
-  const payment = data.payments.find((row) => row.id === paymentId);
+  const payment = data.payments.find(
+    (row) => row.id === paymentId,
+  );
+
   const invoice = payment?.invoice_id
-    ? data.invoices.find((row) => row.id === payment.invoice_id)
+    ? data.invoices.find(
+        (row) =>
+          row.id ===
+          payment.invoice_id,
+      )
     : undefined;
+
   const client = payment?.client_id
-    ? data.clients.find((row) => row.id === payment.client_id)
+    ? data.clients.find(
+        (row) =>
+          row.id ===
+          payment.client_id,
+      )
     : undefined;
+
   if (!payment) return null;
-  const plan = payment.plan_id ? data.plans.find((row) => row.id === payment.plan_id) : undefined;
-  const previous = undefined;
+
+  const plan = payment.plan_id
+    ? data.plans.find(
+        (row) =>
+          row.id === payment.plan_id,
+      )
+    : undefined;
+
   return (
     <div className="fixed inset-0 z-40 bg-foreground/20 lg:end-[30%]">
       <section className="absolute inset-y-0 end-0 flex w-full max-w-xl flex-col overflow-hidden border-s border-border bg-surface shadow-2xl">
         <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div className="min-w-0">
-            <p className="text-xs text-primary">Payment details</p>
+            <p className="text-xs text-primary">
+              Payment details
+            </p>
+
             <h2 className="truncate text-xl font-semibold">
-              {money(payment.amount, payment.currency, lang)}
+              {money(
+                payment.amount,
+                payment.currency,
+                lang,
+              )}
             </h2>
+
             <p className="truncate text-sm text-muted-foreground">
-              {payment.reference || payment.id}
+              {payment.reference ||
+                payment.id}
             </p>
           </div>
-          <Button size="icon" variant="ghost" onClick={onClose} aria-label="Close payment details">
+
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={onClose}
+            aria-label="Close payment details"
+          >
             <X className="size-5" />
           </Button>
         </header>
+
         <div className="duely-scroll flex-1 space-y-5 overflow-y-auto p-5">
           <DetailSection title="Payment">
             <DetailGrid
               rows={[
-                ["Payment ID", payment.id],
-                ["Amount", money(payment.amount, payment.currency, lang)],
-                ["Currency", payment.currency],
-                ["Payment date", formatDate(payment.payment_date, lang)],
-                ["Method", payment.payment_method || "—"],
-                ["Status", statusOf(payment)],
-                ["Reference", payment.reference || "—"],
+                [
+                  "Payment ID",
+                  payment.id,
+                ],
+                [
+                  "Amount",
+                  money(
+                    payment.amount,
+                    payment.currency,
+                    lang,
+                  ),
+                ],
+                [
+                  "Currency",
+                  payment.currency,
+                ],
+                [
+                  "Payment date",
+                  formatDate(
+                    payment.payment_date,
+                    lang,
+                  ),
+                ],
+                [
+                  "Method",
+                  payment.payment_method ||
+                    "—",
+                ],
+                [
+                  "Status",
+                  statusOf(payment),
+                ],
+                [
+                  "Reference",
+                  payment.reference ||
+                    "—",
+                ],
               ]}
             />
           </DetailSection>
+
           <DetailSection title="Client">
             <DetailGrid
               rows={[
-                ["Name", client?.name || "—"],
-                ["Company", client?.company_name || "—"],
-                ["Email", client?.email || "—"],
-                ["Phone", client?.phone || "—"],
+                [
+                  "Name",
+                  client?.name || "—",
+                ],
+                [
+                  "Company",
+                  client?.company_name ||
+                    "—",
+                ],
+                [
+                  "Email",
+                  client?.email || "—",
+                ],
+                [
+                  "Phone",
+                  client?.phone || "—",
+                ],
               ]}
             />
           </DetailSection>
+
           <DetailSection title="Invoice">
             <DetailGrid
               rows={[
-                ["Invoice", invoice?.invoice_number || "Unlinked payment"],
-                ["Invoice amount", invoice ? money(invoice.amount, invoice.currency, lang) : "—"],
-                ["Paid amount", invoice ? money(invoice.paid_amount, invoice.currency, lang) : "—"],
+                [
+                  "Invoice",
+                  invoice?.invoice_number ||
+                    "Unlinked payment",
+                ],
+                [
+                  "Invoice amount",
+                  invoice
+                    ? money(
+                        invoice.amount,
+                        invoice.currency,
+                        lang,
+                      )
+                    : "—",
+                ],
+                [
+                  "Paid amount",
+                  invoice
+                    ? money(
+                        invoice.paid_amount,
+                        invoice.currency,
+                        lang,
+                      )
+                    : "—",
+                ],
                 [
                   "Remaining balance",
-                  invoice ? money(invoice.remaining_balance, invoice.currency, lang) : "—",
+                  invoice
+                    ? money(
+                        invoice.remaining_balance,
+                        invoice.currency,
+                        lang,
+                      )
+                    : "—",
                 ],
-                ["Due date", invoice ? formatDate(invoice.due_date, lang) : "—"],
-                ["Invoice status", invoice?.status || "—"],
+                [
+                  "Due date",
+                  invoice
+                    ? formatDate(
+                        invoice.due_date,
+                        lang,
+                      )
+                    : "—",
+                ],
+                [
+                  "Invoice status",
+                  invoice?.status || "—",
+                ],
               ]}
             />
           </DetailSection>
+
           <DetailSection title="Payment impact">
             <DetailGrid
               rows={[
                 [
                   "Previous outstanding balance",
-                  previous ? money(previous, payment.currency, lang) : "—",
+                  "—",
                 ],
-                ["Payment amount", money(payment.amount, payment.currency, lang)],
+                [
+                  "Payment amount",
+                  money(
+                    payment.amount,
+                    payment.currency,
+                    lang,
+                  ),
+                ],
                 [
                   "Current remaining balance",
-                  invoice ? money(invoice.remaining_balance, invoice.currency, lang) : "—",
+                  invoice
+                    ? money(
+                        invoice.remaining_balance,
+                        invoice.currency,
+                        lang,
+                      )
+                    : "—",
                 ],
               ]}
             />
+
             <p className="mt-3 text-xs text-muted-foreground">
-              The ledger does not store a pre-payment balance, so the previous balance is not
-              inferred.
+              The ledger does not store a
+              pre-payment balance, so the
+              previous balance is not inferred.
             </p>
           </DetailSection>
         </div>
+
         <footer className="flex flex-wrap gap-2 border-t border-border bg-surface p-4">
           <Button
             variant="outline"
-            onClick={() => onToggleContext({ type: "payment", id: payment.id })}
+            onClick={() =>
+              onToggleContext({
+                type: "payment",
+                id: payment.id,
+              })
+            }
           >
-            <Sparkles className="size-4" /> Add Payment Context
+            <Sparkles className="size-4" />
+            Add Payment Context
           </Button>
+
           {invoice && (
-            <Button variant="outline" onClick={() => onInvoice(invoice.id)}>
-              <FileText className="size-4" /> View Invoice
+            <Button
+              variant="outline"
+              onClick={() =>
+                onInvoice(
+                  invoice.id,
+                )
+              }
+            >
+              <FileText className="size-4" />
+              View Invoice
             </Button>
           )}
+
           {client && (
             <Button
               variant="outline"
-              onClick={() => onToggleContext({ type: "client", id: client.id })}
+              onClick={() =>
+                onToggleContext({
+                  type: "client",
+                  id: client.id,
+                })
+              }
             >
-              <CreditCard className="size-4" /> Add Client Context
+              <CreditCard className="size-4" />
+              Add Client Context
             </Button>
           )}
+
           {invoice && (
             <Button
               variant="outline"
-              onClick={() => onToggleContext({ type: "invoice", id: invoice.id })}
+              onClick={() =>
+                onToggleContext({
+                  type: "invoice",
+                  id: invoice.id,
+                })
+              }
             >
-              <FileText className="size-4" /> Add Invoice Context
+              <FileText className="size-4" />
+              Add Invoice Context
             </Button>
           )}
+
           {plan && (
             <Button
               variant="outline"
-              onClick={() => onToggleContext({ type: "payment_plan", id: plan.id })}
+              onClick={() =>
+                onToggleContext({
+                  type: "payment_plan",
+                  id: plan.id,
+                })
+              }
             >
-              <CalendarClock className="size-4" /> Add Plan Context
+              <CalendarClock className="size-4" />
+              Add Plan Context
             </Button>
           )}
+
           {client && (
             <Button
               variant="outline"
               onClick={() =>
-                onAsk(`Summarize ${client.company_name || client.name}'s payment behavior.`)
+                onAsk(
+                  `Summarize ${
+                    client.company_name ||
+                    client.name
+                  }'s payment behavior.`,
+                )
               }
             >
-              <CreditCard className="size-4" /> View Client
+              <CreditCard className="size-4" />
+              View Client
             </Button>
           )}
+
           {client && (
             <Button
               variant="outline"
               onClick={() =>
-                onAsk(`Create a payment plan for ${client.company_name || client.name}.`)
+                onAsk(
+                  `Create a payment plan for ${
+                    client.company_name ||
+                    client.name
+                  }.`,
+                )
               }
             >
-              <CalendarClock className="size-4" /> Ask Haseel for a payment plan
+              <CalendarClock className="size-4" />
+              Ask Haseel for a payment plan
             </Button>
           )}
+
           <Button
-            onClick={() => onAsk(`Explain this payment and its impact on the related invoice.`)}
+            onClick={() =>
+              onAsk(
+                "Explain this payment and its impact on the related invoice.",
+              )
+            }
           >
-            <Sparkles className="size-4" /> Ask Haseel
+            <Sparkles className="size-4" />
+            Ask Haseel
           </Button>
         </footer>
       </section>
@@ -1121,50 +2823,108 @@ function PaymentDrawer({
   );
 }
 
-function Notifications({ data }: { data: PaymentWorkspaceData }) {
-  const notifications = data.analytics.notifications.filter(
-    (item) =>
-      item.event_type.includes("payment") ||
-      item.event_type.includes("installment") ||
-      item.event_type.includes("overdue"),
-  );
+function Notifications({
+  data,
+}: {
+  data: PaymentWorkspaceData;
+}) {
+  const notifications =
+    data.analytics.notifications.filter(
+      (item) =>
+        item.event_type.includes(
+          "payment",
+        ) ||
+        item.event_type.includes(
+          "installment",
+        ) ||
+        item.event_type.includes(
+          "overdue",
+        ),
+    );
+
   return notifications.length ? (
     <section className="rounded-2xl border border-border bg-card p-4">
-      <h2 className="font-semibold">Collection notifications</h2>
+      <h2 className="font-semibold">
+        Collection notifications
+      </h2>
+
       <div className="mt-3 grid gap-2 md:grid-cols-2">
-        {notifications.slice(0, 6).map((notification) => (
-          <div key={notification.id} className="rounded-xl bg-secondary/30 p-3">
-            <p className="text-sm font-medium">{notification.title}</p>
-            <p className="mt-1 break-words text-xs text-muted-foreground">
-              {notification.body || "Review this collection event."}
-            </p>
-          </div>
-        ))}
+        {notifications
+          .slice(0, 6)
+          .map((notification) => (
+            <div
+              key={notification.id}
+              className="rounded-xl bg-secondary/30 p-3"
+            >
+              <p className="text-sm font-medium">
+                {notification.title}
+              </p>
+
+              <p className="mt-1 break-words text-xs text-muted-foreground">
+                {notification.body ||
+                  "Review this collection event."}
+              </p>
+            </div>
+          ))}
       </div>
     </section>
   ) : null;
 }
-function DetailSection({ title, children }: { title: string; children: ReactNode }) {
+
+function DetailSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
     <section className="rounded-2xl border border-border bg-card p-4">
-      <h3 className="mb-3 text-sm font-semibold">{title}</h3>
+      <h3 className="mb-3 text-sm font-semibold">
+        {title}
+      </h3>
+
       {children}
     </section>
   );
 }
-function DetailGrid({ rows }: { rows: [string, string][] }) {
+
+function DetailGrid({
+  rows,
+}: {
+  rows: [string, string][];
+}) {
   return (
     <dl className="space-y-2">
-      {rows.map(([label, value]) => (
-        <div key={label} className="flex gap-4 text-sm">
-          <dt className="w-40 shrink-0 text-muted-foreground">{label}</dt>
-          <dd className="min-w-0 flex-1 break-words">{value}</dd>
-        </div>
-      ))}
+      {rows.map(
+        ([label, value]) => (
+          <div
+            key={label}
+            className="flex gap-4 text-sm"
+          >
+            <dt className="w-40 shrink-0 text-muted-foreground">
+              {label}
+            </dt>
+
+            <dd className="min-w-0 flex-1 break-words">
+              {value}
+            </dd>
+          </div>
+        ),
+      )}
     </dl>
   );
 }
-function Empty({ icon, title, text }: { icon?: ReactNode; title: string; text: string }) {
+
+function Empty({
+  icon,
+  title,
+  text,
+}: {
+  icon?: ReactNode;
+  title: string;
+  text: string;
+}) {
   return (
     <div className="py-8 text-center">
       {icon && (
@@ -1172,11 +2932,18 @@ function Empty({ icon, title, text }: { icon?: ReactNode; title: string; text: s
           {icon}
         </span>
       )}
-      <p className="mt-3 font-medium">{title}</p>
-      <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">{text}</p>
+
+      <p className="mt-3 font-medium">
+        {title}
+      </p>
+
+      <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+        {text}
+      </p>
     </div>
   );
 }
+
 function Select({
   value,
   onChange,
@@ -1191,11 +2958,14 @@ function Select({
   return (
     <label className="flex items-center gap-2 rounded-lg border border-input px-3 text-xs text-muted-foreground">
       <span>{label}</span>
+
       <select
         value={value}
-        onChange={(event) => {
-          onChange(event.target.value);
-        }}
+        onChange={(event) =>
+          onChange(
+            event.target.value,
+          )
+        }
         className="max-w-40 bg-transparent py-2.5 capitalize text-foreground outline-none"
       >
         {children}
@@ -1203,27 +2973,49 @@ function Select({
     </label>
   );
 }
+
 function LoadingState() {
   return (
     <>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {[1, 2, 3, 4, 5, 6].map((key) => (
-          <div key={key} className="h-24 animate-pulse rounded-2xl border border-border bg-card" />
-        ))}
+        {[1, 2, 3, 4, 5, 6].map(
+          (key) => (
+            <div
+              key={key}
+              className="h-24 animate-pulse rounded-2xl border border-border bg-card"
+            />
+          ),
+        )}
       </div>
+
       <div className="h-72 animate-pulse rounded-2xl border border-border bg-card" />
+
       <div className="h-96 animate-pulse rounded-2xl border border-border bg-card" />
     </>
   );
 }
-function ErrorState({ onRetry }: { onRetry: () => void }) {
+
+function ErrorState({
+  onRetry,
+}: {
+  onRetry: () => void;
+}) {
   return (
     <div className="rounded-2xl border border-destructive/30 bg-card p-10 text-center">
-      <p className="font-medium">Unable to load collection data</p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Check your connection and retry. Financial records were not changed.
+      <p className="font-medium">
+        Unable to load collection data
       </p>
-      <Button className="mt-4" variant="outline" onClick={onRetry}>
+
+      <p className="mt-1 text-sm text-muted-foreground">
+        Check your connection and retry.
+        Financial records were not changed.
+      </p>
+
+      <Button
+        className="mt-4"
+        variant="outline"
+        onClick={onRetry}
+      >
         Retry
       </Button>
     </div>
