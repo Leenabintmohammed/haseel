@@ -57,23 +57,33 @@ export function createCustomerTools(
     context,
   } = input;
 
-  /*
-   * Human invoice references must use invoice_reference.
-   *
-   * It can be:
-   *   INV-015
-   *   invoice 015
-   *   015
-   *   or the internal invoice UUID.
-   *
-   * The resolver decides what it means.
-   */
-
   const invoiceReferenceSchema =
     z.object({
       invoice_reference:
         z.string().optional(),
     });
+
+  function resolveCustomerInvoice(
+    invoice_reference?: string,
+  ) {
+    return resolveInvoiceReference(
+      context.invoices,
+      invoice_reference,
+    );
+  }
+
+  function numeric(value: unknown): number {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function roundMoney(
+    value: number,
+  ): number {
+    return Math.round(
+      (value + Number.EPSILON) * 100,
+    ) / 100;
+  }
 
   return {
     get_customer_profile:
@@ -109,7 +119,7 @@ export function createCustomerTools(
               outstanding_only
                 ? context.invoices.filter(
                     (invoice) =>
-                      Number(
+                      numeric(
                         invoice.remaining_balance,
                       ) > 0,
                   )
@@ -132,8 +142,7 @@ export function createCustomerTools(
             invoice_reference,
           }) => {
             const result =
-              resolveInvoiceReference(
-                context.invoices,
+              resolveCustomerInvoice(
                 invoice_reference,
               );
 
@@ -199,8 +208,7 @@ export function createCustomerTools(
             }
 
             const result =
-              resolveInvoiceReference(
-                context.invoices,
+              resolveCustomerInvoice(
                 invoice_reference,
               );
 
@@ -250,8 +258,7 @@ export function createCustomerTools(
             }
 
             const result =
-              resolveInvoiceReference(
-                context.invoices,
+              resolveCustomerInvoice(
                 invoice_reference,
               );
 
@@ -301,8 +308,7 @@ export function createCustomerTools(
             }
 
             const result =
-              resolveInvoiceReference(
-                context.invoices,
+              resolveCustomerInvoice(
                 invoice_reference,
               );
 
@@ -352,8 +358,7 @@ export function createCustomerTools(
             }
 
             const result =
-              resolveInvoiceReference(
-                context.invoices,
+              resolveCustomerInvoice(
                 invoice_reference,
               );
 
@@ -397,10 +402,194 @@ export function createCustomerTools(
             },
       }),
 
+    /*
+     * IMPORTANT:
+     *
+     * This is a READ/CALCULATION operation only.
+     * It NEVER creates a payment-plan request.
+     *
+     * It exists specifically so that:
+     *
+     * "propose a payment plan"
+     *
+     * does not accidentally become:
+     *
+     * "submit a payment-plan request".
+     */
+    propose_payment_plan:
+      tool({
+        description:
+          "Propose payment-plan options for an invoice without creating or submitting any request. This tool is read-only and must be used when the customer asks to propose, suggest, compare, or see payment-plan options.",
+
+        inputSchema:
+          z.object({
+            invoice_reference:
+              z.string()
+                .optional(),
+          }),
+
+        execute:
+          async ({
+            invoice_reference,
+          }) => {
+            const result =
+              resolveCustomerInvoice(
+                invoice_reference,
+              );
+
+            if (
+              result.kind ===
+              "none"
+            ) {
+              return {
+                status:
+                  "invoice_not_found",
+                invoice_reference:
+                  invoice_reference ??
+                  null,
+              };
+            }
+
+            if (
+              result.kind ===
+              "ambiguous"
+            ) {
+              return invoiceReferenceResult(
+                result.invoices,
+              );
+            }
+
+            const invoice =
+              result.invoice;
+
+            const remaining =
+              numeric(
+                invoice.remaining_balance,
+              );
+
+            if (
+              remaining <= 0
+            ) {
+              return {
+                status:
+                  "invoice_already_paid",
+                invoice_number:
+                  invoice.invoice_number,
+              };
+            }
+
+            const status =
+              String(
+                invoice.status ?? "",
+              ).toLowerCase();
+
+            if (
+              [
+                "draft",
+                "paid",
+                "cancelled",
+                "void",
+              ].includes(status)
+            ) {
+              return {
+                status:
+                  "invoice_not_receivable",
+                invoice_number:
+                  invoice.invoice_number,
+                invoice_status:
+                  invoice.status,
+              };
+            }
+
+            const hasActivePlan =
+              context.payment_plans.some(
+                (plan) =>
+                  plan.invoice_id ===
+                    invoice.id &&
+                  [
+                    "active",
+                    "at_risk",
+                    "paused",
+                  ].includes(
+                    String(
+                      plan.status ?? "",
+                    ).toLowerCase(),
+                  ),
+              );
+
+            if (hasActivePlan) {
+              return {
+                status:
+                  "active_plan_exists",
+                invoice_number:
+                  invoice.invoice_number,
+              };
+            }
+
+            const hasPendingRequest =
+              context.payment_plan_requests.some(
+                (request) =>
+                  request.invoice_id ===
+                    invoice.id &&
+                  request.status ===
+                    "pending",
+              );
+
+            if (hasPendingRequest) {
+              return {
+                status:
+                  "request_already_pending",
+                invoice_number:
+                  invoice.invoice_number,
+              };
+            }
+
+            const installmentCounts =
+              [6, 12, 18];
+
+            const options =
+              installmentCounts.map(
+                (count) => ({
+                  installment_count:
+                    count,
+                  frequency:
+                    "monthly" as const,
+                  estimated_installment:
+                    roundMoney(
+                      remaining /
+                        count,
+                    ),
+                  total_amount:
+                    roundMoney(
+                      remaining,
+                    ),
+                }),
+              );
+
+            return {
+              status:
+                "proposals_available",
+              invoice_id:
+                invoice.id,
+              invoice_number:
+                invoice.invoice_number,
+              currency:
+                invoice.currency,
+              remaining_balance:
+                remaining,
+              options,
+              requires_customer_confirmation:
+                true,
+              request_created:
+                false,
+            };
+          },
+      }),
+
     request_payment_plan:
       tool({
         description:
-          "Submit a payment-plan request for business-owner review. Use invoice_reference for the customer's invoice number. Never treat the result as approval.",
+          "Submit a payment-plan request for business-owner review. Use invoice_reference for the customer's invoice number. NEVER use this tool when the customer is only asking to propose, suggest, compare, or see payment-plan options. Only use it when the customer explicitly wants to submit/request a specific plan.",
 
         inputSchema:
           z.object({
@@ -439,8 +628,7 @@ export function createCustomerTools(
             reason,
           }) => {
             const result =
-              resolveInvoiceReference(
-                context.invoices,
+              resolveCustomerInvoice(
                 invoice_reference,
               );
 
@@ -480,8 +668,7 @@ export function createCustomerTools(
                     "paused",
                   ].includes(
                     String(
-                      plan.status ??
-                        "",
+                      plan.status ?? "",
                     ).toLowerCase(),
                   ),
               );
@@ -579,8 +766,7 @@ export function createCustomerTools(
             reason,
           }) => {
             const result =
-              resolveInvoiceReference(
-                context.invoices,
+              resolveCustomerInvoice(
                 invoice_reference,
               );
 
@@ -661,8 +847,7 @@ export function createCustomerTools(
             promise_date,
           }) => {
             const result =
-              resolveInvoiceReference(
-                context.invoices,
+              resolveCustomerInvoice(
                 invoice_reference,
               );
 
