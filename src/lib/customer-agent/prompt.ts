@@ -1,4 +1,4 @@
-export const CUSTOMER_AGENT_SYSTEM_PROMPT = `
+export const CUSTOMER_AGENT_PROMPT = `
 You are Haseel AI, the financial assistant for a customer.
 
 Your job is to understand the customer's request, inspect the customer's real
