@@ -77,18 +77,31 @@ function localDateParts(now: Date, timezone: string) {
 }
 
 function isoFromParts(year: number, month: number, day: number): string {
-  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(
+    2,
+    "0",
+  )}-${String(day).padStart(2, "0")}`;
 }
 
-function isValidCalendarDate(year: number, month: number, day: number): boolean {
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+function isValidCalendarDate(
+  year: number,
+  month: number,
+  day: number,
+): boolean {
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day)
+  ) {
     return false;
   }
+
   if (month < 1 || month > 12 || day < 1 || day > 31) {
     return false;
   }
 
   const date = new Date(Date.UTC(year, month - 1, day));
+
   return (
     date.getUTCFullYear() === year &&
     date.getUTCMonth() === month - 1 &&
@@ -153,8 +166,13 @@ const ARABIC_MONTHS = new Map<string, number>([
 
 function addDays(dateKey: string, days: number): string {
   const [year, month, day] = dateKey.split("-").map(Number);
-  const date = new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1));
+
+  const date = new Date(
+    Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1),
+  );
+
   date.setUTCDate(date.getUTCDate() + days);
+
   return date.toISOString().slice(0, 10);
 }
 
@@ -166,9 +184,11 @@ function toLocalDateKey(now: Date, timezone: string): string {
 function normalizeDigits(value: string): string {
   return value.replace(/[\u0660-\u0669\u06F0-\u06F9]/g, (digit) => {
     const code = digit.charCodeAt(0);
+
     if (code >= 0x0660 && code <= 0x0669) {
       return String(code - 0x0660);
     }
+
     return String(code - 0x06f0);
   });
 }
@@ -189,31 +209,43 @@ function numericValue(raw: number | string | null | undefined): number {
 
 function weekdayIndex(dateKey: string): number {
   const [year, month, day] = dateKey.split("-").map(Number);
-  return new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1)).getUTCDay();
+
+  return new Date(
+    Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1),
+  ).getUTCDay();
 }
 
 function nextWeekday(baseDate: string, targetDay: number): string {
   const current = weekdayIndex(baseDate);
   const delta = (targetDay - current + 7) % 7 || 7;
+
   return addDays(baseDate, delta);
 }
 
 function parseExplicitDate(value: string): string | null {
-  const isoMatch = value.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/u);
+  const isoMatch = value.match(
+    /\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/u,
+  );
+
   if (isoMatch) {
     const year = Number(isoMatch[1]);
     const month = Number(isoMatch[2]);
     const day = Number(isoMatch[3]);
+
     return isValidCalendarDate(year, month, day)
       ? isoFromParts(year, month, day)
       : null;
   }
 
-  const dayFirstMatch = value.match(/\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b/u);
+  const dayFirstMatch = value.match(
+    /\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b/u,
+  );
+
   if (dayFirstMatch) {
     const year = Number(dayFirstMatch[3]);
     const month = Number(dayFirstMatch[2]);
     const day = Number(dayFirstMatch[1]);
+
     return isValidCalendarDate(year, month, day)
       ? isoFromParts(year, month, day)
       : null;
@@ -222,10 +254,13 @@ function parseExplicitDate(value: string): string | null {
   const englishMonthMatch = value.match(
     /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*|\s+)(20\d{2})\b/u,
   );
+
   if (englishMonthMatch) {
     const year = Number(englishMonthMatch[3]);
-    const month = ENGLISH_MONTHS.get(englishMonthMatch[1]!) ?? 0;
+    const month =
+      ENGLISH_MONTHS.get(englishMonthMatch[1]!) ?? 0;
     const day = Number(englishMonthMatch[2]);
+
     return isValidCalendarDate(year, month, day)
       ? isoFromParts(year, month, day)
       : null;
@@ -234,10 +269,13 @@ function parseExplicitDate(value: string): string | null {
   const englishDayMonthMatch = value.match(
     /\b(\d{1,2})(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december)(?:,\s*|\s+)(20\d{2})\b/u,
   );
+
   if (englishDayMonthMatch) {
     const year = Number(englishDayMonthMatch[3]);
-    const month = ENGLISH_MONTHS.get(englishDayMonthMatch[2]!) ?? 0;
+    const month =
+      ENGLISH_MONTHS.get(englishDayMonthMatch[2]!) ?? 0;
     const day = Number(englishDayMonthMatch[1]);
+
     return isValidCalendarDate(year, month, day)
       ? isoFromParts(year, month, day)
       : null;
@@ -252,7 +290,12 @@ function resolveYearlessDate(
   today: string,
 ): string | null {
   const currentYear = Number(today.slice(0, 4));
-  const currentYearDate = isValidCalendarDate(currentYear, month, day)
+
+  const currentYearDate = isValidCalendarDate(
+    currentYear,
+    month,
+    day,
+  )
     ? isoFromParts(currentYear, month, day)
     : null;
 
@@ -261,7 +304,12 @@ function resolveYearlessDate(
   }
 
   const nextYear = currentYear + 1;
-  const nextYearDate = isValidCalendarDate(nextYear, month, day)
+
+  const nextYearDate = isValidCalendarDate(
+    nextYear,
+    month,
+    day,
+  )
     ? isoFromParts(nextYear, month, day)
     : null;
 
@@ -272,10 +320,14 @@ function resolveYearlessDate(
   return null;
 }
 
-function parseMonthNameDateWithoutYear(value: string, today: string): string | null {
+function parseMonthNameDateWithoutYear(
+  value: string,
+  today: string,
+): string | null {
   const englishMonthDayMatch = value.match(
     /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/u,
   );
+
   if (englishMonthDayMatch) {
     return resolveYearlessDate(
       ENGLISH_MONTHS.get(englishMonthDayMatch[1]!) ?? 0,
@@ -287,6 +339,7 @@ function parseMonthNameDateWithoutYear(value: string, today: string): string | n
   const englishDayMonthMatch = value.match(
     /\b(\d{1,2})(?:st|nd|rd|th)?\s+(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\b/u,
   );
+
   if (englishDayMonthMatch) {
     return resolveYearlessDate(
       ENGLISH_MONTHS.get(englishDayMonthMatch[2]!) ?? 0,
@@ -298,6 +351,7 @@ function parseMonthNameDateWithoutYear(value: string, today: string): string | n
   const arabicMonthDayMatch = value.match(
     /(?:^|\s)(\d{1,2})\s+(يناير|كانون الثاني|فبراير|مارس|أبريل|ابريل|نيسان|مايو|أيار|يونيو|حزيران|يوليو|تموز|أغسطس|اغسطس|آب|سبتمبر|أيلول|أكتوبر|اكتوبر|تشرين الاول|نوفمبر|تشرين الثاني|ديسمبر|كانون الاول)(?:\s|$)/u,
   );
+
   if (arabicMonthDayMatch) {
     return resolveYearlessDate(
       ARABIC_MONTHS.get(arabicMonthDayMatch[2]!) ?? 0,
@@ -309,6 +363,7 @@ function parseMonthNameDateWithoutYear(value: string, today: string): string | n
   const arabicMonthFirstMatch = value.match(
     /(?:^|\s)(يناير|كانون الثاني|فبراير|مارس|أبريل|ابريل|نيسان|مايو|أيار|يونيو|حزيران|يوليو|تموز|أغسطس|اغسطس|آب|سبتمبر|أيلول|أكتوبر|اكتوبر|تشرين الاول|نوفمبر|تشرين الثاني|ديسمبر|كانون الاول)\s+(\d{1,2})(?:\s|$)/u,
   );
+
   if (arabicMonthFirstMatch) {
     return resolveYearlessDate(
       ARABIC_MONTHS.get(arabicMonthFirstMatch[1]!) ?? 0,
@@ -320,21 +375,37 @@ function parseMonthNameDateWithoutYear(value: string, today: string): string | n
   return null;
 }
 
-function parseRelativeDate(value: string, today: string): string | null {
-  if (/\btomorrow\b/u.test(value) || /(غداً|غدًا|غدا|غد)/u.test(value) || /(بكرة|بكرا)/u.test(value)) {
+function parseRelativeDate(
+  value: string,
+  today: string,
+): string | null {
+  if (
+    /\btomorrow\b/u.test(value) ||
+    /(غداً|غدًا|غدا|غد)/u.test(value) ||
+    /(بكرة|بكرا)/u.test(value)
+  ) {
     return addDays(today, 1);
   }
 
-  if (/\bnext week\b/u.test(value) || /(الأسبوع|الاسبوع)\s+القادم/u.test(value)) {
+  if (
+    /\bnext week\b/u.test(value) ||
+    /(الأسبوع|الاسبوع)\s+القادم/u.test(value)
+  ) {
     return addDays(today, 7);
   }
 
-  const inDaysMatch = value.match(/\b(?:in|after)\s+(\d+)\s+day(?:s)?\b/u);
+  const inDaysMatch = value.match(
+    /\b(?:in|after)\s+(\d+)\s+day(?:s)?\b/u,
+  );
+
   if (inDaysMatch) {
     return addDays(today, Number(inDaysMatch[1]));
   }
 
-  if (/\bafter two days\b/u.test(value) || /\bin two days\b/u.test(value)) {
+  if (
+    /\bafter two days\b/u.test(value) ||
+    /\bin two days\b/u.test(value)
+  ) {
     return addDays(today, 2);
   }
 
@@ -342,7 +413,10 @@ function parseRelativeDate(value: string, today: string): string | null {
     return addDays(today, 2);
   }
 
-  const arabicDaysMatch = value.match(/بعد\s+(\d+)\s+(?:يوم|أيام|ايام)/u);
+  const arabicDaysMatch = value.match(
+    /بعد\s+(\d+)\s+(?:يوم|أيام|ايام)/u,
+  );
+
   if (arabicDaysMatch) {
     return addDays(today, Number(arabicDaysMatch[1]));
   }
@@ -350,7 +424,10 @@ function parseRelativeDate(value: string, today: string): string | null {
   return null;
 }
 
-function parseWeekdayDate(value: string, today: string): string | null {
+function parseWeekdayDate(
+  value: string,
+  today: string,
+): string | null {
   const weekdays: Array<[RegExp, number]> = [
     [/\b(?:monday)\b/u, 1],
     [/\b(?:tuesday)\b/u, 2],
@@ -382,8 +459,13 @@ export function parsePaymentPromiseDate(
   options?: { now?: Date; timezone?: string },
 ): string | null {
   const timezone = options?.timezone ?? "Asia/Dubai";
-  const today = toLocalDateKey(options?.now ?? new Date(), timezone);
+  const today = toLocalDateKey(
+    options?.now ?? new Date(),
+    timezone,
+  );
+
   const normalized = normalizeText(message);
+
   const explicitDate =
     parseExplicitDate(normalized) ??
     parseMonthNameDateWithoutYear(normalized, today) ??
@@ -401,70 +483,118 @@ export function formatPaymentPromiseDate(
   promiseDate: string,
   locale: "ar" | "en",
 ): string {
-  return new Intl.DateTimeFormat(locale === "ar" ? "ar-AE" : "en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${promiseDate}T00:00:00.000Z`));
+  return new Intl.DateTimeFormat(
+    locale === "ar" ? "ar-AE" : "en-US",
+    {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    },
+  ).format(new Date(`${promiseDate}T00:00:00.000Z`));
 }
 
 export function detectPaymentPromiseIntent(
   message: string,
   options?: { now?: Date; timezone?: string },
 ): PromiseIntent {
-  const locale: "ar" | "en" = isArabicText(message) ? "ar" : "en";
+  const locale: "ar" | "en" = isArabicText(message)
+    ? "ar"
+    : "en";
+
   const normalized = normalizeText(message);
+
   const vaguePattern =
-    /\b(?:maybe|might|try|trying|hope|hopefully|perhaps|probably)\b/u.test(normalized) ||
-    /(ربما|قد|يمكن|سأحاول|احاول|أتمنى|ان شاء الله|إن شاء الله)/u.test(normalized);
+    /\b(?:maybe|might|try|trying|hope|hopefully|perhaps|probably)\b/u.test(
+      normalized,
+    ) ||
+    /(ربما|قد|يمكن|سأحاول|احاول|أتمنى|ان شاء الله|إن شاء الله)/u.test(
+      normalized,
+    );
+
   if (vaguePattern) {
     return { kind: "none", locale };
   }
 
   const hasCommitment =
-    /\b(?:i will|i ll|i'll|we will|we ll|we'll)\b.*\b(?:pay|transfer|send)\b/u.test(normalized) ||
-    /(سأدفع|سادفع|سأحول|ساحول|سأرسل|سارسل|سأقوم بتحويل)/u.test(normalized);
+    /\b(?:i will|i ll|i'll|we will|we ll|we'll)\b.*\b(?:pay|transfer|send)\b/u.test(
+      normalized,
+    ) ||
+    /(سأدفع|سادفع|سأحول|ساحول|سأرسل|سارسل|سأقوم بتحويل)/u.test(
+      normalized,
+    );
+
   if (!hasCommitment) {
     return { kind: "none", locale };
   }
 
-  const promiseDate = parsePaymentPromiseDate(message, options);
+  const promiseDate = parsePaymentPromiseDate(
+    message,
+    options,
+  );
+
   if (!promiseDate) {
     return { kind: "none", locale };
   }
 
-  return { kind: "confirmed", promiseDate, locale };
+  return {
+    kind: "confirmed",
+    promiseDate,
+    locale,
+  };
 }
 
 export function findPromiseInvoiceMatch(
   message: string,
   invoices: PromiseInvoiceRow[],
 ): PromiseInvoiceMatch {
-  const openInvoices = invoices.filter((invoice) => numericValue(invoice.remaining_balance) > 0);
+  const openInvoices = invoices.filter(
+    (invoice) =>
+      numericValue(invoice.remaining_balance) > 0,
+  );
+
   if (openInvoices.length === 0) {
     return { kind: "none" };
   }
 
   const normalizedMessage = normalizeText(message);
+
   const mentioned = openInvoices.filter((invoice) => {
-    const invoiceNumber = normalizeText(invoice.invoice_number ?? "");
-    return invoiceNumber.length > 0 && normalizedMessage.includes(invoiceNumber);
+    const invoiceNumber = normalizeText(
+      invoice.invoice_number ?? "",
+    );
+
+    return (
+      invoiceNumber.length > 0 &&
+      normalizedMessage.includes(invoiceNumber)
+    );
   });
 
   if (mentioned.length === 1) {
-    return { kind: "single", invoice: mentioned[0]! };
+    return {
+      kind: "single",
+      invoice: mentioned[0]!,
+    };
   }
 
   if (mentioned.length > 1) {
-    return { kind: "ambiguous", invoices: mentioned };
+    return {
+      kind: "ambiguous",
+      invoices: mentioned,
+    };
   }
 
   if (openInvoices.length === 1) {
-    return { kind: "single", invoice: openInvoices[0]! };
+    return {
+      kind: "single",
+      invoice: openInvoices[0]!,
+    };
   }
 
-  return { kind: "ambiguous", invoices: openInvoices };
+  return {
+    kind: "ambiguous",
+    invoices: openInvoices,
+  };
 }
 
 export async function getOwnerTimezone(
@@ -477,7 +607,10 @@ export async function getOwnerTimezone(
     .eq("owner_id", ownerId)
     .maybeSingle();
 
-  return normalizeTimezone((data as { timezone?: string } | null)?.timezone ?? "Asia/Dubai");
+  return normalizeTimezone(
+    (data as { timezone?: string } | null)?.timezone ??
+      "Asia/Dubai",
+  );
 }
 
 export async function getActivePaymentPromise(args: {
@@ -494,10 +627,58 @@ export async function getActivePaymentPromise(args: {
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to load active payment promise for invoice ${args.invoiceId}: ${error.message}`);
+    throw new Error(
+      `Failed to load active payment promise for invoice ${args.invoiceId}: ${error.message}`,
+    );
   }
 
   return (data as PaymentPromiseRow | null) ?? null;
+}
+
+/**
+ * Loads all active payment promises for a set of invoices
+ * in one database request.
+ *
+ * This is intentionally used by the reminder engine instead
+ * of calling getActivePaymentPromise() once per invoice.
+ */
+export async function getActivePaymentPromisesForInvoices(args: {
+  supabase: SupabaseClient;
+  ownerId: string;
+  invoiceIds: string[];
+}): Promise<Map<string, PaymentPromiseRow>> {
+  if (args.invoiceIds.length === 0) {
+    return new Map();
+  }
+
+  const uniqueInvoiceIds = [
+    ...new Set(args.invoiceIds),
+  ];
+
+  const { data, error } = await args.supabase
+    .from("payment_promises")
+    .select(
+      "id,owner_id,invoice_id,client_id,promise_date,status,customer_message,created_at,resolved_at",
+    )
+    .eq("owner_id", args.ownerId)
+    .eq("status", "active")
+    .in("invoice_id", uniqueInvoiceIds);
+
+  if (error) {
+    throw new Error(
+      `Failed to load active payment promises for owner ${args.ownerId}: ${error.message}`,
+    );
+  }
+
+  const promises = new Map<string, PaymentPromiseRow>();
+
+  for (const row of (data as PaymentPromiseRow[] | null) ?? []) {
+    if (row.invoice_id) {
+      promises.set(row.invoice_id, row);
+    }
+  }
+
+  return promises;
 }
 
 export async function createPaymentPromise(args: {
@@ -508,51 +689,91 @@ export async function createPaymentPromise(args: {
   promiseDate: string;
   customerMessage?: string | null;
 }): Promise<
-  | { created: true; promise: PaymentPromiseRow; invoice: PromiseInvoiceRow }
-  | { created: false; reason: "invoice_not_found" | "client_not_found" | "invoice_client_mismatch" | "invoice_not_open" | "duplicate_active_promise"; existingPromise?: PaymentPromiseRow | null }
+  | {
+      created: true;
+      promise: PaymentPromiseRow;
+      invoice: PromiseInvoiceRow;
+    }
+  | {
+      created: false;
+      reason:
+        | "invoice_not_found"
+        | "client_not_found"
+        | "invoice_client_mismatch"
+        | "invoice_not_open"
+        | "duplicate_active_promise";
+      existingPromise?: PaymentPromiseRow | null;
+    }
 > {
-  const { data: invoice, error: invoiceError } = await args.supabase
-    .from("invoices")
-    .select("id,owner_id,client_id,invoice_number,status,remaining_balance")
-    .eq("owner_id", args.ownerId)
-    .eq("id", args.invoiceId)
-    .maybeSingle();
+  const { data: invoice, error: invoiceError } =
+    await args.supabase
+      .from("invoices")
+      .select(
+        "id,owner_id,client_id,invoice_number,status,remaining_balance",
+      )
+      .eq("owner_id", args.ownerId)
+      .eq("id", args.invoiceId)
+      .maybeSingle();
 
   if (invoiceError) {
-    throw new Error(`Failed to load invoice ${args.invoiceId}: ${invoiceError.message}`);
-  }
-  if (!invoice) {
-    return { created: false, reason: "invoice_not_found" };
+    throw new Error(
+      `Failed to load invoice ${args.invoiceId}: ${invoiceError.message}`,
+    );
   }
 
-  const { data: client, error: clientError } = await args.supabase
-    .from("clients")
-    .select("id")
-    .eq("owner_id", args.ownerId)
-    .eq("id", args.clientId)
-    .maybeSingle();
+  if (!invoice) {
+    return {
+      created: false,
+      reason: "invoice_not_found",
+    };
+  }
+
+  const { data: client, error: clientError } =
+    await args.supabase
+      .from("clients")
+      .select("id")
+      .eq("owner_id", args.ownerId)
+      .eq("id", args.clientId)
+      .maybeSingle();
 
   if (clientError) {
-    throw new Error(`Failed to load client ${args.clientId}: ${clientError.message}`);
+    throw new Error(
+      `Failed to load client ${args.clientId}: ${clientError.message}`,
+    );
   }
+
   if (!client) {
-    return { created: false, reason: "client_not_found" };
+    return {
+      created: false,
+      reason: "client_not_found",
+    };
   }
 
   const typedInvoice = invoice as PromiseInvoiceRow;
+
   if (typedInvoice.client_id !== args.clientId) {
-    return { created: false, reason: "invoice_client_mismatch" };
+    return {
+      created: false,
+      reason: "invoice_client_mismatch",
+    };
   }
 
-  if (!(numericValue(typedInvoice.remaining_balance) > 0)) {
-    return { created: false, reason: "invoice_not_open" };
+  if (
+    !(numericValue(typedInvoice.remaining_balance) > 0)
+  ) {
+    return {
+      created: false,
+      reason: "invoice_not_open",
+    };
   }
 
-  const existingPromise = await getActivePaymentPromise({
-    supabase: args.supabase,
-    ownerId: args.ownerId,
-    invoiceId: args.invoiceId,
-  });
+  const existingPromise =
+    await getActivePaymentPromise({
+      supabase: args.supabase,
+      ownerId: args.ownerId,
+      invoiceId: args.invoiceId,
+    });
+
   if (existingPromise) {
     return {
       created: false,
@@ -561,7 +782,10 @@ export async function createPaymentPromise(args: {
     };
   }
 
-  const { data: promise, error } = await args.supabase
+  const {
+    data: promise,
+    error,
+  } = await args.supabase
     .from("payment_promises")
     .insert({
       owner_id: args.ownerId,
@@ -575,7 +799,11 @@ export async function createPaymentPromise(args: {
     .single();
 
   if (error || !promise) {
-    throw new Error(`Failed to create payment promise for invoice ${args.invoiceId}: ${error?.message ?? "Unknown error"}`);
+    throw new Error(
+      `Failed to create payment promise for invoice ${args.invoiceId}: ${
+        error?.message ?? "Unknown error"
+      }`,
+    );
   }
 
   return {
@@ -596,10 +824,16 @@ async function resolveActivePromise(
       .eq("id", args.promiseId)
       .eq("status", "active")
       .maybeSingle();
+
     if (error) {
-      throw new Error(`Failed to load payment promise ${args.promiseId}: ${error.message}`);
+      throw new Error(
+        `Failed to load payment promise ${args.promiseId}: ${error.message}`,
+      );
     }
-    return (data as PaymentPromiseRow | null) ?? null;
+
+    return (
+      (data as PaymentPromiseRow | null) ?? null
+    );
   }
 
   if (!args.invoiceId) {
@@ -614,14 +848,20 @@ async function resolveActivePromise(
 }
 
 async function resolvePromiseStatus(
-  args: MutationArgs & { status: Exclude<PaymentPromiseStatus, "active"> },
+  args: MutationArgs & {
+    status: Exclude<PaymentPromiseStatus, "active">;
+  },
 ): Promise<PaymentPromiseRow | null> {
-  const activePromise = await resolveActivePromise(args);
+  const activePromise =
+    await resolveActivePromise(args);
+
   if (!activePromise) {
     return null;
   }
 
-  const resolvedAt = args.resolvedAt ?? new Date().toISOString();
+  const resolvedAt =
+    args.resolvedAt ?? new Date().toISOString();
+
   const { data, error } = await args.supabase
     .from("payment_promises")
     .update({
@@ -635,22 +875,42 @@ async function resolvePromiseStatus(
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to update payment promise ${activePromise.id}: ${error.message}`);
+    throw new Error(
+      `Failed to update payment promise ${activePromise.id}: ${error.message}`,
+    );
   }
 
-  return (data as PaymentPromiseRow | null) ?? activePromise;
+  return (
+    (data as PaymentPromiseRow | null) ??
+    activePromise
+  );
 }
 
-export async function fulfillPaymentPromise(args: MutationArgs) {
-  return resolvePromiseStatus({ ...args, status: "fulfilled" });
+export async function fulfillPaymentPromise(
+  args: MutationArgs,
+) {
+  return resolvePromiseStatus({
+    ...args,
+    status: "fulfilled",
+  });
 }
 
-export async function breakPaymentPromise(args: MutationArgs) {
-  return resolvePromiseStatus({ ...args, status: "broken" });
+export async function breakPaymentPromise(
+  args: MutationArgs,
+) {
+  return resolvePromiseStatus({
+    ...args,
+    status: "broken",
+  });
 }
 
-export async function cancelPaymentPromise(args: MutationArgs) {
-  return resolvePromiseStatus({ ...args, status: "cancelled" });
+export async function cancelPaymentPromise(
+  args: MutationArgs,
+) {
+  return resolvePromiseStatus({
+    ...args,
+    status: "cancelled",
+  });
 }
 
 export async function evaluatePaymentPromises(args: {
@@ -658,90 +918,279 @@ export async function evaluatePaymentPromises(args: {
   ownerId: string;
   now?: Date;
   timezone?: string;
-}): Promise<{ evaluated: number; fulfilled: number; broken: number; cancelled: number; localDate: string }> {
-  const timezone = args.timezone ?? (await getOwnerTimezone(args.supabase, args.ownerId));
-  const localDate = toLocalDateKey(args.now ?? new Date(), timezone);
+}): Promise<{
+  evaluated: number;
+  fulfilled: number;
+  broken: number;
+  cancelled: number;
+  localDate: string;
+}> {
+  const timezone =
+    args.timezone ??
+    (await getOwnerTimezone(
+      args.supabase,
+      args.ownerId,
+    ));
+
+  const localDate = toLocalDateKey(
+    args.now ?? new Date(),
+    timezone,
+  );
+
   const { data, error } = await args.supabase
     .from("payment_promises")
-    .select("id,owner_id,invoice_id,client_id,promise_date,status,customer_message,created_at,resolved_at")
+    .select(
+      "id,owner_id,invoice_id,client_id,promise_date,status,customer_message,created_at,resolved_at",
+    )
     .eq("owner_id", args.ownerId)
     .eq("status", "active");
 
   if (error) {
-    throw new Error(`Failed to list payment promises for owner ${args.ownerId}: ${error.message}`);
+    throw new Error(
+      `Failed to list payment promises for owner ${args.ownerId}: ${error.message}`,
+    );
   }
+
+  const activePromises =
+    (data as PaymentPromiseRow[] | null) ?? [];
+
+  const expiredPromises = activePromises.filter(
+    (promise) =>
+      promise.promise_date < localDate,
+  );
+
+  if (expiredPromises.length === 0) {
+    return {
+      evaluated: 0,
+      fulfilled: 0,
+      broken: 0,
+      cancelled: 0,
+      localDate,
+    };
+  }
+
+  const promisesWithInvoices =
+    expiredPromises.filter(
+      (promise) => Boolean(promise.invoice_id),
+    );
+
+  const promisesWithoutInvoices =
+    expiredPromises.filter(
+      (promise) => !promise.invoice_id,
+    );
 
   let fulfilled = 0;
   let broken = 0;
   let cancelled = 0;
-  let evaluated = 0;
 
-  for (const promise of (data as PaymentPromiseRow[] | null) ?? []) {
-    if (!promise.invoice_id) {
-      const cancelledPromise = await cancelPaymentPromise({
-        supabase: args.supabase,
-        ownerId: args.ownerId,
-        promiseId: promise.id,
-      });
-      if (cancelledPromise) {
-        cancelled++;
-        evaluated++;
-      }
-      continue;
+  const resolvedAt = new Date().toISOString();
+
+  /*
+   * Promises without invoices can be cancelled in one
+   * database update.
+   */
+  if (promisesWithoutInvoices.length > 0) {
+    const promiseIds =
+      promisesWithoutInvoices.map(
+        (promise) => promise.id,
+      );
+
+    const { data: cancelledRows, error: cancelError } =
+      await args.supabase
+        .from("payment_promises")
+        .update({
+          status: "cancelled",
+          resolved_at: resolvedAt,
+        })
+        .eq("owner_id", args.ownerId)
+        .eq("status", "active")
+        .in("id", promiseIds)
+        .select("*");
+
+    if (cancelError) {
+      throw new Error(
+        `Failed to cancel payment promises for owner ${args.ownerId}: ${cancelError.message}`,
+      );
     }
 
-    if (promise.promise_date >= localDate) {
-      continue;
-    }
+    cancelled =
+      (cancelledRows as PaymentPromiseRow[] | null)
+        ?.length ?? 0;
+  }
 
-    const { data: invoice, error: invoiceError } = await args.supabase
-      .from("invoices")
-      .select("id,remaining_balance,status")
-      .eq("owner_id", args.ownerId)
-      .eq("id", promise.invoice_id)
-      .maybeSingle();
+  /*
+   * Load all required invoices in one database request.
+   * Previously this was one query per payment promise,
+   * which could exhaust Cloudflare Worker subrequests.
+   */
+  if (promisesWithInvoices.length > 0) {
+    const invoiceIds = [
+      ...new Set(
+        promisesWithInvoices
+          .map((promise) => promise.invoice_id)
+          .filter(
+            (invoiceId): invoiceId is string =>
+              Boolean(invoiceId),
+          ),
+      ),
+    ];
+
+    const { data: invoices, error: invoiceError } =
+      await args.supabase
+        .from("invoices")
+        .select("id,remaining_balance,status")
+        .eq("owner_id", args.ownerId)
+        .in("id", invoiceIds);
 
     if (invoiceError) {
-      throw new Error(`Failed to load invoice ${promise.invoice_id} while evaluating payment promises: ${invoiceError.message}`);
+      throw new Error(
+        `Failed to load invoices while evaluating payment promises for owner ${args.ownerId}: ${invoiceError.message}`,
+      );
     }
 
-    evaluated++;
-    if (!invoice) {
-      const cancelledPromise = await cancelPaymentPromise({
-        supabase: args.supabase,
-        ownerId: args.ownerId,
-        promiseId: promise.id,
-      });
-      if (cancelledPromise) {
-        cancelled++;
+    const invoiceMap = new Map<
+      string,
+      {
+        id: string;
+        remaining_balance: number | string | null;
+        status: string;
       }
-      continue;
-    }
+    >();
 
-    if (numericValue((invoice as { remaining_balance?: number | string | null }).remaining_balance) <= 0) {
-      const fulfilledPromise = await fulfillPaymentPromise({
-        supabase: args.supabase,
-        ownerId: args.ownerId,
-        promiseId: promise.id,
+    for (const invoice of invoices ?? []) {
+      invoiceMap.set(invoice.id, {
+        id: invoice.id,
+        remaining_balance:
+          invoice.remaining_balance,
+        status: invoice.status,
       });
-      if (fulfilledPromise) {
-        fulfilled++;
-      }
-      continue;
     }
 
-    const brokenPromise = await breakPaymentPromise({
-      supabase: args.supabase,
-      ownerId: args.ownerId,
-      promiseId: promise.id,
-    });
-    if (brokenPromise) {
-      broken++;
+    const fulfilledPromiseIds: string[] = [];
+    const brokenPromiseIds: string[] = [];
+    const missingInvoicePromiseIds: string[] = [];
+
+    for (const promise of promisesWithInvoices) {
+      const invoiceId = promise.invoice_id!;
+
+      const invoice = invoiceMap.get(invoiceId);
+
+      if (!invoice) {
+        missingInvoicePromiseIds.push(
+          promise.id,
+        );
+        continue;
+      }
+
+      if (
+        numericValue(invoice.remaining_balance) <= 0
+      ) {
+        fulfilledPromiseIds.push(
+          promise.id,
+        );
+      } else {
+        brokenPromiseIds.push(
+          promise.id,
+        );
+      }
+    }
+
+    /*
+     * Fulfill all satisfied promises in one request.
+     */
+    if (fulfilledPromiseIds.length > 0) {
+      const {
+        data: fulfilledRows,
+        error: fulfilledError,
+      } = await args.supabase
+        .from("payment_promises")
+        .update({
+          status: "fulfilled",
+          resolved_at: resolvedAt,
+        })
+        .eq("owner_id", args.ownerId)
+        .eq("status", "active")
+        .in("id", fulfilledPromiseIds)
+        .select("*");
+
+      if (fulfilledError) {
+        throw new Error(
+          `Failed to fulfill payment promises for owner ${args.ownerId}: ${fulfilledError.message}`,
+        );
+      }
+
+      fulfilled =
+        (fulfilledRows as PaymentPromiseRow[] | null)
+          ?.length ?? 0;
+    }
+
+    /*
+     * Break all expired promises whose invoices still
+     * have an outstanding balance in one request.
+     */
+    if (brokenPromiseIds.length > 0) {
+      const {
+        data: brokenRows,
+        error: brokenError,
+      } = await args.supabase
+        .from("payment_promises")
+        .update({
+          status: "broken",
+          resolved_at: resolvedAt,
+        })
+        .eq("owner_id", args.ownerId)
+        .eq("status", "active")
+        .in("id", brokenPromiseIds)
+        .select("*");
+
+      if (brokenError) {
+        throw new Error(
+          `Failed to break payment promises for owner ${args.ownerId}: ${brokenError.message}`,
+        );
+      }
+
+      broken =
+        (brokenRows as PaymentPromiseRow[] | null)
+          ?.length ?? 0;
+    }
+
+    /*
+     * A promise referencing a missing invoice can no longer
+     * be fulfilled or broken based on invoice state, so it
+     * is cancelled.
+     */
+    if (missingInvoicePromiseIds.length > 0) {
+      const {
+        data: cancelledMissingRows,
+        error: cancelMissingError,
+      } = await args.supabase
+        .from("payment_promises")
+        .update({
+          status: "cancelled",
+          resolved_at: resolvedAt,
+        })
+        .eq("owner_id", args.ownerId)
+        .eq("status", "active")
+        .in("id", missingInvoicePromiseIds)
+        .select("*");
+
+      if (cancelMissingError) {
+        throw new Error(
+          `Failed to cancel payment promises with missing invoices for owner ${args.ownerId}: ${cancelMissingError.message}`,
+        );
+      }
+
+      cancelled +=
+        (
+          cancelledMissingRows as
+            | PaymentPromiseRow[]
+            | null
+        )?.length ?? 0;
     }
   }
 
   return {
-    evaluated,
+    evaluated: expiredPromises.length,
     fulfilled,
     broken,
     cancelled,
