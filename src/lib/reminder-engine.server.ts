@@ -179,19 +179,27 @@ function normalizeTimezone(value: string): string {
   }
 }
 
-function localParts(now: Date, timezone: string) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(now);
+function localParts(
+  now: Date,
+  timezone: string,
+) {
+  const parts = new Intl.DateTimeFormat(
+    "en-GB",
+    {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    },
+  ).formatToParts(now);
 
   const value = (type: string) =>
-    parts.find((part) => part.type === type)?.value ?? "";
+    parts.find(
+      (part) => part.type === type,
+    )?.value ?? "";
 
   return {
     year: value("year"),
@@ -225,7 +233,8 @@ function localTimeInMinutes(
 function configuredTimeInMinutes(
   reminderTime: string,
 ): number {
-  const [h, m] = reminderTime.split(":");
+  const [h, m] =
+    reminderTime.split(":");
 
   const hour = Number(h);
   const minute = Number(m);
@@ -244,22 +253,33 @@ function configuredTimeInMinutes(
   return hour * 60 + minute;
 }
 
-function normalizePhone(value: string): string {
+function normalizePhone(
+  value: string,
+): string {
   return value.replace(/\D/g, "");
 }
 
-function asAmount(value: number | string): number {
+function asAmount(
+  value: number | string,
+): number {
   const parsed = Number(value);
 
-  return Number.isFinite(parsed) ? parsed : 0;
+  return Number.isFinite(parsed)
+    ? parsed
+    : 0;
 }
 
 function paymentSection(
   paymentLink: string | null,
   payment: BusinessPaymentSettings | null,
 ): string[] {
-  if (paymentLink && paymentLink.trim()) {
-    return [`Payment link: ${paymentLink.trim()}`];
+  if (
+    paymentLink &&
+    paymentLink.trim()
+  ) {
+    return [
+      `Payment link: ${paymentLink.trim()}`,
+    ];
   }
 
   if (!payment) {
@@ -276,7 +296,9 @@ function paymentSection(
     payment.account_number
       ? `Account number: ${payment.account_number}`
       : null,
-    payment.iban ? `IBAN: ${payment.iban}` : null,
+    payment.iban
+      ? `IBAN: ${payment.iban}`
+      : null,
     payment.swift_bic
       ? `SWIFT/BIC: ${payment.swift_bic}`
       : null,
@@ -298,27 +320,33 @@ export function resolveReminderType(
   settings: ReminderSettings,
 ): ReminderType | null {
   if (
-    daysOverdue < settings.friendly_start_day
+    daysOverdue <
+    settings.friendly_start_day
   ) {
     return null;
   }
 
   if (
-    daysOverdue >= settings.serious_start_day
+    daysOverdue >=
+    settings.serious_start_day
   ) {
     return "serious";
   }
 
   if (
-    daysOverdue >= settings.firm_start_day &&
-    daysOverdue <= settings.firm_end_day
+    daysOverdue >=
+      settings.firm_start_day &&
+    daysOverdue <=
+      settings.firm_end_day
   ) {
     return "firm";
   }
 
   if (
-    daysOverdue >= settings.friendly_start_day &&
-    daysOverdue <= settings.friendly_end_day
+    daysOverdue >=
+      settings.friendly_start_day &&
+    daysOverdue <=
+      settings.friendly_end_day
   ) {
     return "friendly";
   }
@@ -338,7 +366,9 @@ export function buildReminderMessage(input: {
   paymentSettings: BusinessPaymentSettings | null;
   paymentPromise?: {
     promiseDate: string;
-    status: "due_today" | "broken";
+    status:
+      | "due_today"
+      | "broken";
   } | null;
 }): string {
   const greeting =
@@ -352,13 +382,17 @@ export function buildReminderMessage(input: {
     string
   > = {
     friendly: `Just a friendly reminder that invoice ${input.invoiceNumber} (${amountText}) was due on ${input.dueDate}.`,
+
     firm: `This is a reminder that invoice ${input.invoiceNumber} (${amountText}) is now ${input.daysOverdue} day(s) overdue (due ${input.dueDate}).`,
+
     serious: `Invoice ${input.invoiceNumber} (${amountText}) is ${input.daysOverdue} day(s) overdue (due ${input.dueDate}). Please arrange payment as soon as possible.`,
   };
 
   const promiseIntro =
-    input.paymentPromise?.status === "due_today"
+    input.paymentPromise?.status ===
+    "due_today"
       ? `The payment you promised for invoice ${input.invoiceNumber} is due today, but we have not yet recorded the payment.`
+
       : input.paymentPromise?.status ===
           "broken"
         ? `The payment you promised for invoice ${input.invoiceNumber} was due on ${new Intl.DateTimeFormat(
@@ -374,18 +408,22 @@ export function buildReminderMessage(input: {
               `${input.paymentPromise.promiseDate}T00:00:00.000Z`,
             ),
           )}, but we have not yet recorded the payment.`
+
         : null;
 
-  const paymentLines = paymentSection(
-    input.paymentLink,
-    input.paymentSettings,
-  );
+  const paymentLines =
+    paymentSection(
+      input.paymentLink,
+      input.paymentSettings,
+    );
 
   const lines = [
     greeting,
     "",
     promiseIntro ??
-      introByType[input.reminderType],
+      introByType[
+        input.reminderType
+      ],
   ];
 
   if (promiseIntro) {
@@ -396,7 +434,10 @@ export function buildReminderMessage(input: {
   }
 
   if (paymentLines.length) {
-    lines.push("", ...paymentLines);
+    lines.push(
+      "",
+      ...paymentLines,
+    );
   }
 
   lines.push(
@@ -411,13 +452,17 @@ function invoiceCollectible(
   invoice: ReminderInvoice,
 ): boolean {
   if (
-    NON_RECEIVABLE_SET.has(invoice.status)
+    NON_RECEIVABLE_SET.has(
+      invoice.status,
+    )
   ) {
     return false;
   }
 
   return (
-    asAmount(invoice.remaining_balance) > 0
+    asAmount(
+      invoice.remaining_balance,
+    ) > 0
   );
 }
 
@@ -428,7 +473,9 @@ export async function runReminderEngineForOwner(
 ): Promise<ReminderEngineResult> {
   const settings = {
     ...DEFAULT_REMINDER_SETTINGS,
-    ...(await deps.getReminderSettings(ownerId)),
+    ...(await deps.getReminderSettings(
+      ownerId,
+    )),
   };
 
   if (
@@ -446,26 +493,32 @@ export async function runReminderEngineForOwner(
     };
   }
 
-  const timezone = normalizeTimezone(
-    settings.timezone,
-  );
+  const timezone =
+    normalizeTimezone(
+      settings.timezone,
+    );
 
-  const localDate = toLocalDateKey(
-    now,
-    timezone,
-  );
+  const localDate =
+    toLocalDateKey(
+      now,
+      timezone,
+    );
 
-  const localMinutes = localTimeInMinutes(
-    now,
-    timezone,
-  );
+  const localMinutes =
+    localTimeInMinutes(
+      now,
+      timezone,
+    );
 
   const reminderMinutes =
     configuredTimeInMinutes(
       settings.reminder_time,
     );
 
-  if (localMinutes < reminderMinutes) {
+  if (
+    localMinutes <
+    reminderMinutes
+  ) {
     return {
       owner_id: ownerId,
       sent: 0,
@@ -509,11 +562,10 @@ export async function runReminderEngineForOwner(
     now.toISOString();
 
   /*
-   * First identify the invoices that are actually
-   * eligible for reminder processing.
+   * Build eligible reminder candidates first.
    *
-   * This lets us load all active payment promises
-   * for those invoices with ONE database request.
+   * This prevents unnecessary payment-promise queries
+   * for invoices that cannot actually receive a reminder.
    */
   const candidates: Array<{
     invoice: ReminderInvoice;
@@ -532,22 +584,26 @@ export async function runReminderEngineForOwner(
       continue;
     }
 
-    const phone = normalizePhone(
-      invoice.clients?.phone ?? "",
-    );
+    const phone =
+      normalizePhone(
+        invoice.clients?.phone ?? "",
+      );
 
-    if (!/^\d{8,15}$/.test(phone)) {
+    if (
+      !/^\d{8,15}$/.test(phone)
+    ) {
       skipped++;
       continue;
     }
 
-    const daysOverdue = Math.max(
-      0,
-      daysBetween(
-        invoice.due_date,
-        localDate,
-      ),
-    );
+    const daysOverdue =
+      Math.max(
+        0,
+        daysBetween(
+          invoice.due_date,
+          localDate,
+        ),
+      );
 
     const reminderType =
       resolveReminderType(
@@ -581,11 +637,8 @@ export async function runReminderEngineForOwner(
   }
 
   /*
-   * IMPORTANT:
-   * Previously the engine executed one payment_promises
-   * query for every invoice.
-   *
-   * This now performs one query for the entire owner batch.
+   * Load all active payment promises for all candidate
+   * invoices using ONE database request.
    */
   const activePaymentPromises =
     await deps.getActivePaymentPromises(
@@ -619,9 +672,6 @@ export async function runReminderEngineForOwner(
       | null = null;
 
     if (activePromise) {
-      /*
-       * A future promise postpones the reminder.
-       */
       if (
         activePromise.promise_date >
         localDate
@@ -630,10 +680,6 @@ export async function runReminderEngineForOwner(
         continue;
       }
 
-      /*
-       * The invoice was already fully paid,
-       * so resolve the payment promise.
-       */
       if (
         asAmount(
           invoice.remaining_balance,
@@ -649,9 +695,6 @@ export async function runReminderEngineForOwner(
         continue;
       }
 
-      /*
-       * Promise is due today.
-       */
       if (
         activePromise.promise_date ===
         localDate
@@ -665,13 +708,10 @@ export async function runReminderEngineForOwner(
         paymentPromiseContext = {
           promiseDate:
             activePromise.promise_date,
-          status: "due_today",
+          status:
+            "due_today",
         };
       } else {
-        /*
-         * Promise date has passed and the invoice
-         * is still unpaid.
-         */
         await deps.breakPaymentPromise(
           ownerId,
           invoice.id,
@@ -681,7 +721,8 @@ export async function runReminderEngineForOwner(
         paymentPromiseContext = {
           promiseDate:
             activePromise.promise_date,
-          status: "broken",
+          status:
+            "broken",
         };
       }
     }
@@ -691,19 +732,30 @@ export async function runReminderEngineForOwner(
         customerName:
           invoice.clients?.name?.trim() ||
           "there",
+
         invoiceNumber:
           invoice.invoice_number,
+
         amount: asAmount(
           invoice.remaining_balance,
         ),
+
         currency:
-          invoice.currency || "AED",
-        dueDate: invoice.due_date,
+          invoice.currency ||
+          "AED",
+
+        dueDate:
+          invoice.due_date,
+
         daysOverdue,
+
         reminderType,
+
         paymentLink:
           invoice.payment_link,
+
         paymentSettings,
+
         paymentPromise:
           paymentPromiseContext,
       });
@@ -720,12 +772,16 @@ export async function runReminderEngineForOwner(
         slot_id: slotId,
         owner_id: ownerId,
         invoice_id: invoice.id,
-        client_id: invoice.client_id,
+        client_id:
+          invoice.client_id,
         channel: "whatsapp",
-        reminder_type: reminderType,
+        reminder_type:
+          reminderType,
         message,
-        scheduled_at: scheduledAt,
-        days_overdue: daysOverdue,
+        scheduled_at:
+          scheduledAt,
+        days_overdue:
+          daysOverdue,
       });
 
     if (!claim.claimed) {
@@ -741,6 +797,10 @@ export async function runReminderEngineForOwner(
       continue;
     }
 
+    console.log(
+      `[ReminderEngine] Sending WhatsApp reminder for owner ${ownerId}, invoice ${invoice.id}, phone ${phone}`,
+    );
+
     const sendResult =
       await deps.sendWhatsApp({
         to: phone,
@@ -752,12 +812,33 @@ export async function runReminderEngineForOwner(
         slotId,
         ownerId,
         status: "sent",
-        sentAt: scheduledAt,
+        sentAt:
+          scheduledAt,
       });
 
       sent++;
+
+      console.log(
+        `[ReminderEngine] WhatsApp reminder sent successfully for owner ${ownerId}, invoice ${invoice.id}`,
+      );
+
       continue;
     }
+
+    /*
+     * IMPORTANT:
+     * Previously we only incremented failed++ here.
+     * The actual WAHA error was lost.
+     *
+     * Log the concrete delivery failure so the next
+     * Cloudflare execution tells us exactly why the
+     * WhatsApp send failed.
+     */
+    console.error(
+      `[ReminderEngine] WhatsApp reminder failed for owner ${ownerId}, invoice ${invoice.id}, phone ${phone}:`,
+      sendResult.error ??
+        "Unknown WhatsApp delivery error",
+    );
 
     await deps.finalizeReminderAttempt({
       slotId,
@@ -774,7 +855,8 @@ export async function runReminderEngineForOwner(
     sent,
     failed,
     skipped,
-    already_sent_today: alreadySent,
+    already_sent_today:
+      alreadySent,
     settings_disabled: false,
     waiting_for_time_window: false,
   };
@@ -789,15 +871,22 @@ export async function processReminderEngineForOwner(
 ): Promise<ReminderEngineResult> {
   const deps: ReminderEngineDependencies =
     {
-      async getReminderSettings(ownerId) {
-        const { data, error } =
-          await args.supabase
-            .from("reminder_settings")
-            .select(
-              "enabled,daily_enabled,reminder_time,timezone,friendly_start_day,friendly_end_day,firm_start_day,firm_end_day,serious_start_day",
-            )
-            .eq("owner_id", ownerId)
-            .maybeSingle();
+      async getReminderSettings(
+        ownerId,
+      ) {
+        const {
+          data,
+          error,
+        } = await args.supabase
+          .from("reminder_settings")
+          .select(
+            "enabled,daily_enabled,reminder_time,timezone,friendly_start_day,friendly_end_day,firm_start_day,firm_end_day,serious_start_day",
+          )
+          .eq(
+            "owner_id",
+            ownerId,
+          )
+          .maybeSingle();
 
         if (error) {
           throw new Error(
@@ -806,8 +895,9 @@ export async function processReminderEngineForOwner(
         }
 
         return (
-          (data as ReminderSettings | null) ??
-          null
+          (data as
+            | ReminderSettings
+            | null) ?? null
         );
       },
 
@@ -824,22 +914,27 @@ export async function processReminderEngineForOwner(
               )}"`,
           ).join(",")})`;
 
-        const { data, error } =
-          await args.supabase
-            .from("invoices")
-            .select(
-              "id,owner_id,client_id,invoice_number,due_date,status,remaining_balance,currency,payment_link,clients(name,phone)",
-            )
-            .eq("owner_id", ownerId)
-            .not(
-              "status",
-              "in",
-              nonReceivableCsv,
-            )
-            .lt(
-              "due_date",
-              localDate,
-            );
+        const {
+          data,
+          error,
+        } = await args.supabase
+          .from("invoices")
+          .select(
+            "id,owner_id,client_id,invoice_number,due_date,status,remaining_balance,currency,payment_link,clients(name,phone)",
+          )
+          .eq(
+            "owner_id",
+            ownerId,
+          )
+          .not(
+            "status",
+            "in",
+            nonReceivableCsv,
+          )
+          .lt(
+            "due_date",
+            localDate,
+          );
 
         if (error) {
           throw new Error(
@@ -848,24 +943,30 @@ export async function processReminderEngineForOwner(
         }
 
         return (
-          (data as ReminderInvoice[] | null) ??
-          []
+          (data as
+            | ReminderInvoice[]
+            | null) ?? []
         );
       },
 
       async getBusinessPaymentSettings(
         ownerId,
       ) {
-        const { data, error } =
-          await args.supabase
-            .from(
-              "business_payment_settings",
-            )
-            .select(
-              "bank_name,account_name,account_number,iban,swift_bic,payment_instructions",
-            )
-            .eq("owner_id", ownerId)
-            .maybeSingle();
+        const {
+          data,
+          error,
+        } = await args.supabase
+          .from(
+            "business_payment_settings",
+          )
+          .select(
+            "bank_name,account_name,account_number,iban,swift_bic,payment_instructions",
+          )
+          .eq(
+            "owner_id",
+            ownerId,
+          )
+          .maybeSingle();
 
         if (error) {
           throw new Error(
@@ -926,7 +1027,9 @@ export async function processReminderEngineForOwner(
         );
       },
 
-      async claimReminderAttempt(row) {
+      async claimReminderAttempt(
+        row,
+      ) {
         const claimStartedAt =
           new Date().toISOString();
 
@@ -936,7 +1039,8 @@ export async function processReminderEngineForOwner(
           .from("reminders")
           .insert({
             id: row.slot_id,
-            owner_id: row.owner_id,
+            owner_id:
+              row.owner_id,
             invoice_id:
               row.invoice_id,
             client_id:
@@ -961,7 +1065,8 @@ export async function processReminderEngineForOwner(
         if (!insertError) {
           return {
             claimed: true,
-            existingStatus: null,
+            existingStatus:
+              null,
           };
         }
 
@@ -976,7 +1081,8 @@ export async function processReminderEngineForOwner(
 
         const {
           data: reclaimed,
-          error: reclaimError,
+          error:
+            reclaimError,
         } = await args.supabase
           .from("reminders")
           .update({
@@ -1021,13 +1127,6 @@ export async function processReminderEngineForOwner(
           };
         }
 
-        /*
-         * External delivery cannot be made transactional
-         * with DB finalization.
-         *
-         * Only reclaim stale processing rows to provide
-         * bounded retries while minimizing duplicate sends.
-         */
         const staleCutoffIso =
           new Date(
             Date.now() -
@@ -1035,8 +1134,10 @@ export async function processReminderEngineForOwner(
           ).toISOString();
 
         const {
-          data: staleReclaimed,
-          error: staleReclaimError,
+          data:
+            staleReclaimed,
+          error:
+            staleReclaimError,
         } = await args.supabase
           .from("reminders")
           .update({
@@ -1092,7 +1193,8 @@ export async function processReminderEngineForOwner(
 
         const {
           data: existing,
-          error: existingError,
+          error:
+            existingError,
         } = await args.supabase
           .from("reminders")
           .select("status")
@@ -1115,7 +1217,8 @@ export async function processReminderEngineForOwner(
         return {
           claimed: false,
           existingStatus:
-            existing?.status ?? null,
+            existing?.status ??
+            null,
         };
       },
 
@@ -1163,7 +1266,9 @@ export async function processReminderEngineForOwner(
         }
       },
 
-      async sendWhatsApp(input) {
+      async sendWhatsApp(
+        input,
+      ) {
         const result =
           await sendMessage(input);
 
