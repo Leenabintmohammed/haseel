@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+  ArrowDownRight,
   ArrowRight,
   BarChart3,
   Bot,
@@ -8,7 +9,9 @@ import {
   ChevronRight,
   CircleDollarSign,
   Clock3,
+  FileCheck2,
   FileText,
+  Landmark,
   MessageSquare,
   Receipt,
   ShieldCheck,
@@ -16,11 +19,12 @@ import {
   TrendingUp,
   Users,
   Wallet,
+  Workflow,
   Zap,
 } from "lucide-react";
 
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -31,7 +35,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Haseel helps businesses create invoices, collect payments, follow up with customers and run financial operations through AI.",
+          "Haseel is an AI-native financial operations platform for businesses. Manage customers, invoices, payments, collections, payment plans, reminders and financial workflows from one intelligent workspace.",
       },
       {
         property: "og:title",
@@ -40,965 +44,991 @@ export const Route = createFileRoute("/")({
       {
         property: "og:description",
         content:
-          "Create. Collect. Follow up. Let Haseel run your financial operations.",
+          "The first release of Haseel brings invoices, payments, collections, customer memory, payment plans, reminders, WhatsApp and AI financial operations into one system.",
       },
     ],
   }),
-  component: Landing,
+  component: LandingPage,
 });
 
-function Landing() {
-  const [signedIn, setSignedIn] = useState(false);
+function LandingPage() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+
     supabase.auth.getSession().then(({ data }) => {
-      setSignedIn(Boolean(data.session));
+      if (mounted) {
+        setIsAuthenticated(Boolean(data.session));
+      }
     });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) {
+        setIsAuthenticated(Boolean(session));
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const authPath = signedIn ? "/dashboard" : "/auth";
+  const primaryHref = isAuthenticated ? "/dashboard" : "/auth";
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#050706] text-white selection:bg-emerald-400/20">
-      {/* Ambient background */}
+    <main className="min-h-screen overflow-x-hidden bg-[#07110d] text-white selection:bg-emerald-300/20 selection:text-emerald-100">
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute left-1/2 top-[-22rem] h-[46rem] w-[46rem] -translate-x-1/2 rounded-full bg-emerald-400/[0.09] blur-[150px]" />
-        <div className="absolute right-[-15rem] top-[45rem] h-[32rem] w-[32rem] rounded-full bg-emerald-500/[0.035] blur-[140px]" />
-        <div className="absolute left-[-18rem] top-[105rem] h-[34rem] w-[34rem] rounded-full bg-emerald-400/[0.025] blur-[140px]" />
+        <div className="absolute left-[-16rem] top-[-10rem] h-[34rem] w-[34rem] rounded-full bg-emerald-500/10 blur-[120px]" />
+        <div className="absolute right-[-12rem] top-[16rem] h-[32rem] w-[32rem] rounded-full bg-cyan-500/8 blur-[120px]" />
+        <div className="absolute bottom-[-12rem] left-[24%] h-[30rem] w-[30rem] rounded-full bg-lime-500/6 blur-[120px]" />
       </div>
 
-      {/* ──────────────────────────────────────────────────────────────
-          NAV
-      ────────────────────────────────────────────────────────────── */}
-      <header className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6 lg:px-8">
-        <Link to="/" className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08]">
-            <Sparkles className="size-4 text-emerald-400" />
-          </div>
+      <Header primaryHref={primaryHref} />
 
-          <span className="text-xl font-semibold tracking-[-0.045em]">
-            Haseel
-          </span>
-        </Link>
-
-        <nav className="hidden items-center gap-8 md:flex">
-          <a
-            href="#how-it-works"
-            className="text-sm text-white/40 transition hover:text-white"
-          >
-            How it works
-          </a>
-
-          <a
-            href="#product"
-            className="text-sm text-white/40 transition hover:text-white"
-          >
-            Product
-          </a>
-
-          <a
-            href="#future"
-            className="text-sm text-white/40 transition hover:text-white"
-          >
-            The future
-          </a>
-        </nav>
-
-        <div className="flex items-center gap-3">
-          <Link
-            to="/auth"
-            className="hidden text-sm text-white/45 transition hover:text-white sm:block"
-          >
-            Sign in
-          </Link>
-
-          <Button
-            asChild
-            className="rounded-full bg-white px-5 text-black hover:bg-white/90"
-          >
-            <Link to={authPath}>
-              {signedIn ? "Open Haseel" : "Start free"}
-            </Link>
-          </Button>
-        </div>
-      </header>
-
-      <main>
-        {/* ──────────────────────────────────────────────────────────────
-            HERO
-        ────────────────────────────────────────────────────────────── */}
-        <section className="mx-auto max-w-7xl px-6 pb-28 pt-20 lg:px-8 lg:pb-36 lg:pt-28">
-          <div className="mx-auto max-w-5xl text-center">
-            <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.025] px-4 py-2 text-xs text-white/45">
-              <span className="size-1.5 rounded-full bg-emerald-400" />
-              AI-native financial operations
-              <span className="text-white/20">·</span>
-              Built for small businesses
-            </div>
-
-            <h1 className="text-balance text-5xl font-semibold leading-[0.92] tracking-[-0.07em] sm:text-6xl lg:text-8xl">
-              Get paid.
-              <br />
-              <span className="text-white/95">Without chasing.</span>
-              <br />
-              <span className="text-emerald-400">Haseel handles it.</span>
-            </h1>
-
-            <p className="mx-auto mt-8 max-w-2xl text-balance text-base leading-7 text-white/50 sm:text-lg">
-              Haseel is your AI financial employee. Create invoices, track
-              payments, follow up with customers, understand their replies
-              and keep your receivables moving — through one simple
-              conversation.
-            </p>
-
-            <div className="mt-9 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Button
-                asChild
-                size="lg"
-                className="h-12 rounded-full bg-emerald-400 px-8 text-black shadow-[0_0_40px_rgba(52,211,153,0.14)] hover:bg-emerald-300"
-              >
-                <Link to={authPath}>
-                  {signedIn ? "Open your workspace" : "Start free"}
-                  <ArrowRight className="ml-2 size-4" />
-                </Link>
-              </Button>
-
-              <a
-                href="#how-it-works"
-                className="inline-flex items-center gap-1 text-sm text-white/35 transition hover:text-white"
-              >
-                See how it works
-                <ChevronRight className="size-4" />
-              </a>
-            </div>
-          </div>
-
-          {/* Hero product mockup */}
-          <div className="relative mx-auto mt-20 max-w-6xl">
-            <div className="absolute inset-x-20 -bottom-16 h-44 rounded-full bg-emerald-400/[0.08] blur-[110px]" />
-
-            <div className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#090d0b] shadow-2xl shadow-black/60">
-              <div className="flex h-12 items-center justify-between border-b border-white/10 px-4">
-                <div className="flex gap-1.5">
-                  <span className="size-2.5 rounded-full bg-white/10" />
-                  <span className="size-2.5 rounded-full bg-white/10" />
-                  <span className="size-2.5 rounded-full bg-white/10" />
-                </div>
-
-                <div className="flex items-center gap-2 text-[10px] tracking-[0.22em] text-white/20">
-                  <Sparkles className="size-3 text-emerald-400/60" />
-                  HASEEL
-                </div>
-
-                <div className="w-12" />
-              </div>
-
-              <div className="grid min-h-[500px] lg:grid-cols-[210px_1fr]">
-                {/* Sidebar */}
-                <div className="hidden border-r border-white/10 p-5 lg:block">
-                  <div className="mb-10 flex items-center gap-2">
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-400/10">
-                      <Sparkles className="size-4 text-emerald-400" />
-                    </div>
-
-                    <span className="text-sm font-semibold">Haseel</span>
-                  </div>
-
-                  <div className="space-y-1">
-                    {[
-                      "Overview",
-                      "Invoices",
-                      "Customers",
-                      "Payments",
-                      "AI activity",
-                    ].map((item, index) => (
-                      <div
-                        key={item}
-                        className={`rounded-lg px-3 py-2.5 text-xs ${
-                          index === 0
-                            ? "bg-white/5 text-white"
-                            : "text-white/25"
-                        }`}
-                      >
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-10 rounded-xl border border-emerald-400/10 bg-emerald-400/[0.035] p-3">
-                    <div className="flex items-center gap-2 text-[11px] text-emerald-300">
-                      <ShieldCheck className="size-3.5" />
-                      AI controls active
-                    </div>
-
-                    <p className="mt-2 text-[10px] leading-5 text-white/25">
-                      Sensitive actions require your approval.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Main UI */}
-                <div className="flex min-w-0 flex-col">
-                  <div className="border-b border-white/10 px-5 py-5 sm:px-7">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium">Good morning.</p>
-                        <p className="mt-1 text-xs text-white/30">
-                          Here is what needs your attention today.
-                        </p>
-                      </div>
-
-                      <div className="hidden items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/[0.04] px-3 py-1.5 text-[10px] text-emerald-300 sm:flex">
-                        <span className="size-1.5 rounded-full bg-emerald-400" />
-                        AI online
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid flex-1 gap-4 p-5 sm:p-7 lg:grid-cols-[1fr_250px]">
-                    {/* Conversation */}
-                    <div className="space-y-4">
-                      <div className="max-w-lg rounded-2xl rounded-tl-md border border-white/10 bg-white/[0.025] p-4">
-                        <div className="text-[10px] uppercase tracking-[0.16em] text-white/20">
-                          You
-                        </div>
-
-                        <p className="mt-2 text-sm leading-6 text-white/75">
-                          Create an invoice for ABC for AED 12,000. Payment is
-                          due in 30 days.
-                        </p>
-                      </div>
-
-                      <div className="ml-auto max-w-lg rounded-2xl rounded-tr-md border border-emerald-400/20 bg-emerald-400/[0.045] p-4">
-                        <div className="flex items-center gap-2 text-xs text-emerald-300">
-                          <Sparkles className="size-3.5" />
-                          Haseel
-                        </div>
-
-                        <p className="mt-2 text-sm leading-6 text-white/75">
-                          Done. I created invoice{" "}
-                          <span className="text-white">INV-001</span> for
-                          AED 12,000, due in 30 days.
-                        </p>
-
-                        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
-                          <div className="flex items-center gap-2 text-xs text-white/60">
-                            <FileText className="size-3.5 text-emerald-400" />
-                            Invoice ready
-                          </div>
-
-                          <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">
-                            <div>
-                              <div className="text-white/20">Customer</div>
-                              <div className="mt-1 text-white/60">ABC</div>
-                            </div>
-
-                            <div>
-                              <div className="text-white/20">Amount</div>
-                              <div className="mt-1 text-white/60">
-                                AED 12,000
-                              </div>
-                            </div>
-
-                            <div>
-                              <div className="text-white/20">Due</div>
-                              <div className="mt-1 text-white/60">30 days</div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.035] p-3">
-                          <div className="flex items-center gap-2 text-xs text-emerald-300">
-                            <ShieldCheck className="size-3.5" />
-                            Approval required
-                          </div>
-
-                          <p className="mt-1 text-[11px] text-white/25">
-                            Haseel will wait for your approval before sending.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex size-7 items-center justify-center rounded-lg bg-white/5">
-                            <Sparkles className="size-3.5 text-white/30" />
-                          </div>
-
-                          <span className="flex-1 text-xs text-white/20">
-                            Tell Haseel what happened...
-                          </span>
-
-                          <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-400 text-black">
-                            <ArrowRight className="size-3.5" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right rail */}
-                    <div className="hidden space-y-3 lg:block">
-                      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                        <div className="text-[10px] uppercase tracking-[0.18em] text-white/20">
-                          Receivables
-                        </div>
-
-                        <div className="mt-3 text-2xl font-semibold tracking-[-0.04em]">
-                          AED 48.2k
-                        </div>
-
-                        <div className="mt-1 text-[11px] text-white/30">
-                          outstanding
-                        </div>
-
-                        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/5">
-                          <div className="h-full w-[68%] rounded-full bg-emerald-400/70" />
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                        <div className="flex items-center gap-2 text-[11px] text-white/45">
-                          <MessageSquare className="size-3.5 text-emerald-400" />
-                          WhatsApp
-                        </div>
-
-                        <p className="mt-2 text-[11px] leading-5 text-white/25">
-                          3 customer conversations need attention.
-                        </p>
-
-                        <div className="mt-3 space-y-2">
-                          <div className="rounded-lg bg-white/[0.025] px-3 py-2 text-[10px] text-white/35">
-                            “I can pay next Tuesday.”
-                          </div>
-
-                          <div className="rounded-lg bg-white/[0.025] px-3 py-2 text-[10px] text-white/35">
-                            “Can we split this invoice?”
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                        <div className="flex items-center gap-2 text-[11px] text-white/45">
-                          <TrendingUp className="size-3.5 text-emerald-400" />
-                          Today
-                        </div>
-
-                        <div className="mt-3 space-y-2 text-[10px]">
-                          <div className="flex justify-between">
-                            <span className="text-white/25">Paid</span>
-                            <span className="text-white/60">
-                              AED 8,420
-                            </span>
-                          </div>
-
-                          <div className="flex justify-between">
-                            <span className="text-white/25">Overdue</span>
-                            <span className="text-white/60">7</span>
-                          </div>
-
-                          <div className="flex justify-between">
-                            <span className="text-white/25">
-                              Follow-ups
-                            </span>
-                            <span className="text-emerald-300">12</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ──────────────────────────────────────────────────────────────
-            LOGO / TRUST STRIP
-        ────────────────────────────────────────────────────────────── */}
-        <section className="border-y border-white/10">
-          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 px-6 py-8 text-center sm:flex-row sm:text-left lg:px-8">
-            <p className="max-w-xl text-sm leading-6 text-white/30">
-              Built for the everyday financial work that steals time from
-              business owners.
-            </p>
-
-            <div className="flex flex-wrap justify-center gap-x-7 gap-y-3 text-xs uppercase tracking-[0.2em] text-white/15">
-              <span>Invoices</span>
-              <span>Collections</span>
-              <span>WhatsApp</span>
-              <span>Payments</span>
-              <span>AI</span>
-            </div>
-          </div>
-        </section>
-
-        {/* ──────────────────────────────────────────────────────────────
-            PROBLEM → SOLUTION
-        ────────────────────────────────────────────────────────────── */}
-        <section
-          id="how-it-works"
-          className="mx-auto max-w-7xl px-6 py-28 lg:px-8 lg:py-36"
-        >
-          <div className="grid gap-14 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+      <section className="relative">
+        <div className="mx-auto max-w-7xl px-6 pb-20 pt-14 sm:px-10 sm:pb-28 sm:pt-20 lg:px-12 lg:pt-28">
+          <div className="grid items-center gap-14 lg:grid-cols-[1.02fr_0.98fr] lg:gap-16">
             <div>
-              <div className="mb-5 text-xs font-medium uppercase tracking-[0.22em] text-emerald-400/80">
-                The problem
+              <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/8 px-3.5 py-2 text-xs font-medium tracking-wide text-emerald-300">
+                <Sparkles className="h-3.5 w-3.5" />
+                Haseel V1 — The first release
               </div>
 
-              <h2 className="max-w-xl text-4xl font-semibold leading-[1] tracking-[-0.055em] sm:text-5xl">
-                Running a business should not mean chasing money.
-              </h2>
+              <h1 className="max-w-3xl text-5xl font-semibold leading-[0.98] tracking-[-0.045em] sm:text-6xl lg:text-[5.25rem]">
+                Your business has
+                <span className="block text-emerald-300">
+                  a financial employee.
+                </span>
+              </h1>
 
-              <p className="mt-6 max-w-xl text-base leading-7 text-white/40">
-                Invoices are created manually. Payments get missed. Customers
-                need follow-ups. Someone has to remember who promised to pay,
-                who asked for more time and who is becoming a risk.
+              <p className="mt-7 max-w-2xl text-lg leading-8 text-zinc-300 sm:text-xl">
+                Haseel is an AI-native financial operations platform that helps
+                you manage customers, invoices, payments, collections and
+                everyday financial workflows from one intelligent system.
+              </p>
+
+              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+                <Link to={primaryHref}>
+                  <Button className="h-12 rounded-xl bg-emerald-400 px-6 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300">
+                    Start with Haseel V1
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+
+                <a
+                  href="#how-it-works"
+                  className="inline-flex h-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-6 text-sm font-medium text-white transition hover:bg-white/[0.06]"
+                >
+                  See how it works
+                  <ChevronRight className="ml-2 h-4 w-4 text-zinc-400" />
+                </a>
+              </div>
+
+              <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-sm text-zinc-400">
+                <span className="inline-flex items-center gap-2">
+                  <Check className="h-4 w-4 text-emerald-300" />
+                  Built for small businesses
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <Check className="h-4 w-4 text-emerald-300" />
+                  AI-native from the start
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <Check className="h-4 w-4 text-emerald-300" />
+                  WhatsApp-ready
+                </span>
+              </div>
+            </div>
+
+            <HeroProductMockup />
+          </div>
+        </div>
+      </section>
+
+      <TrustBar />
+
+      <section className="border-y border-white/6 bg-[#091610]">
+        <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12">
+          <div className="grid gap-16 lg:grid-cols-[0.72fr_1.28fr]">
+            <div>
+              <SectionEyebrow>Why Haseel</SectionEyebrow>
+              <h2 className="mt-5 max-w-xl text-4xl font-semibold leading-tight tracking-[-0.035em] sm:text-5xl">
+                Accounting tells you what happened.
+                <span className="block text-emerald-300">
+                  Haseel helps you act.
+                </span>
+              </h2>
+              <p className="mt-6 max-w-lg text-base leading-7 text-zinc-400">
+                Most financial software is built around recording transactions.
+                Haseel is built around operating the business around those
+                transactions.
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              {[
-                {
-                  icon: Clock3,
-                  title: "Hours disappear",
-                  text: "Manual reminders, payment tracking and repetitive follow-ups.",
-                },
-                {
-                  icon: Users,
-                  title: "Customer context gets lost",
-                  text: "Important conversations and payment behavior live in different places.",
-                },
-                {
-                  icon: CircleDollarSign,
-                  title: "Cash arrives late",
-                  text: "Small delays become bigger receivables problems.",
-                },
-                {
-                  icon: Bot,
-                  title: "Too much depends on you",
-                  text: "The financial work keeps coming back to the owner.",
-                },
-              ].map((item) => {
-                const Icon = item.icon;
-
-                return (
-                  <div
-                    key={item.title}
-                    className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 transition hover:border-emerald-400/15 hover:bg-emerald-400/[0.025]"
-                  >
-                    <div className="flex size-10 items-center justify-center rounded-xl bg-white/5">
-                      <Icon className="size-4 text-emerald-400" />
-                    </div>
-
-                    <h3 className="mt-5 text-base font-medium">
-                      {item.title}
-                    </h3>
-
-                    <p className="mt-2 text-sm leading-6 text-white/30">
-                      {item.text}
-                    </p>
-                  </div>
-                );
-              })}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ProblemCard
+                icon={Receipt}
+                title="Invoices"
+                text="Create, calculate, send and track invoices without moving between disconnected tools."
+              />
+              <ProblemCard
+                icon={CircleDollarSign}
+                title="Payments"
+                text="Know what has been paid, what remains outstanding and what changed."
+              />
+              <ProblemCard
+                icon={MessageSquare}
+                title="Collections"
+                text="Follow up with customers through timely reminders instead of manually chasing every payment."
+              />
+              <ProblemCard
+                icon={Bot}
+                title="AI operations"
+                text="Ask Haseel to understand the business and perform supported financial actions for you."
+              />
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ──────────────────────────────────────────────────────────────
-            HOW IT WORKS
-        ────────────────────────────────────────────────────────────── */}
-        <section className="border-y border-white/10 bg-white/[0.015]">
-          <div className="mx-auto max-w-7xl px-6 py-28 lg:px-8 lg:py-36">
-            <div className="mx-auto max-w-2xl text-center">
-              <div className="mb-5 text-xs font-medium uppercase tracking-[0.22em] text-emerald-400/80">
-                How Haseel works
-              </div>
-
-              <h2 className="text-4xl font-semibold leading-[1] tracking-[-0.055em] sm:text-5xl">
-                One conversation.
-                <br />
-                Your financial operations move.
-              </h2>
-
-              <p className="mt-6 text-base leading-7 text-white/35">
-                You tell Haseel what you want. Haseel understands the context,
-                performs the work and keeps you in control of important
-                decisions.
-              </p>
-            </div>
-
-            <div className="mt-16 grid gap-4 md:grid-cols-4">
-              {[
-                {
-                  number: "01",
-                  icon: MessageSquare,
-                  title: "Tell",
-                  text: "“Create an invoice for ABC for AED 12,000.”",
-                },
-                {
-                  number: "02",
-                  icon: Zap,
-                  title: "Act",
-                  text: "Haseel creates the invoice, calculates totals and prepares it.",
-                },
-                {
-                  number: "03",
-                  icon: ShieldCheck,
-                  title: "Control",
-                  text: "Sensitive actions can require your approval before execution.",
-                },
-                {
-                  number: "04",
-                  icon: TrendingUp,
-                  title: "Keep moving",
-                  text: "Haseel continues tracking the customer and payment journey.",
-                },
-              ].map((step) => {
-                const Icon = step.icon;
-
-                return (
-                  <div
-                    key={step.number}
-                    className="relative rounded-2xl border border-white/10 bg-[#090c0a] p-6"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-medium tracking-[0.2em] text-white/20">
-                        {step.number}
-                      </span>
-
-                      <Icon className="size-4 text-emerald-400" />
-                    </div>
-
-                    <h3 className="mt-8 text-lg font-medium">{step.title}</h3>
-
-                    <p className="mt-2 text-sm leading-6 text-white/30">
-                      {step.text}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        {/* ──────────────────────────────────────────────────────────────
-            PRODUCT
-        ────────────────────────────────────────────────────────────── */}
-        <section
-          id="product"
-          className="mx-auto max-w-7xl px-6 py-28 lg:px-8 lg:py-36"
-        >
-          <div className="mx-auto max-w-2xl text-center">
-            <div className="mb-5 text-xs font-medium uppercase tracking-[0.22em] text-emerald-400/80">
-              What Haseel handles
-            </div>
-
-            <h2 className="text-4xl font-semibold leading-[1] tracking-[-0.055em] sm:text-5xl">
-              The work behind getting paid.
-              <br />
-              In one place.
+      <section id="how-it-works">
+        <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-28">
+          <div className="max-w-3xl">
+            <SectionEyebrow>How Haseel works</SectionEyebrow>
+            <h2 className="mt-5 text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
+              From a conversation to a financial action.
             </h2>
+            <p className="mt-6 text-lg leading-8 text-zinc-400">
+              Haseel combines financial data, business rules, customer context
+              and AI tools into one operating loop.
+            </p>
           </div>
 
-          <div className="mt-16 grid gap-4 lg:grid-cols-3">
+          <div className="mt-14 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StepCard
+              number="01"
+              icon={MessageSquare}
+              title="Tell"
+              text="Ask Haseel what you need in natural language."
+              example={`"Show me all overdue invoices."`}
+            />
+            <StepCard
+              number="02"
+              icon={Workflow}
+              title="Understand"
+              text="Haseel reads the relevant financial and customer context."
+              example="7 invoices • AED 84,500 outstanding"
+            />
+            <StepCard
+              number="03"
+              icon={Zap}
+              title="Act"
+              text="It performs supported actions according to your company rules."
+              example="Prepare 4 customer follow-ups"
+            />
+            <StepCard
+              number="04"
+              icon={ShieldCheck}
+              title="Control"
+              text="Sensitive actions can require your approval before execution."
+              example="Send reminders? Review & approve"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-white/6 bg-[#0a1610]">
+        <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-28">
+          <div className="flex max-w-3xl flex-col gap-5">
+            <SectionEyebrow>Inside Haseel V1</SectionEyebrow>
+            <h2 className="text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
+              One financial operating layer.
+            </h2>
+            <p className="text-lg leading-8 text-zinc-400">
+              V1 focuses on the core operational problems that happen between
+              creating an invoice and actually getting paid.
+            </p>
+          </div>
+
+          <div className="mt-14 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <FeatureCard
+              icon={Users}
+              title="Customer management"
+              text="Keep customer profiles, contact details, preferences and financial context together."
+              items={[
+                "Customer profiles",
+                "Customer history",
+                "Preferred language",
+                "Customer memory",
+              ]}
+            />
+
             <FeatureCard
               icon={FileText}
-              eyebrow="01"
               title="Invoices"
-              description="Create, calculate, organize and track invoices without repetitive admin work."
+              text="Create and manage invoices with real financial calculations and lifecycle states."
               items={[
-                "Create invoices with natural language",
-                "Line items, discounts and tax",
-                "PDF generation",
-                "Invoice lifecycle tracking",
+                "Invoice creation",
+                "Line items & tax",
+                "Invoice status",
+                "PDF invoices",
+              ]}
+            />
+
+            <FeatureCard
+              icon={Wallet}
+              title="Payments"
+              text="Track payments and balances accurately across your invoices."
+              items={[
+                "Payment recording",
+                "Outstanding balances",
+                "Payment history",
+                "Payment reversals",
+              ]}
+            />
+
+            <FeatureCard
+              icon={CircleDollarSign}
+              title="Payment plans"
+              text="Manage structured installment arrangements when customers cannot pay everything at once."
+              items={[
+                "Installment schedules",
+                "Payment allocation",
+                "Plan tracking",
+                "Pause / resume flows",
+              ]}
+            />
+
+            <FeatureCard
+              icon={Clock3}
+              title="Collections & reminders"
+              text="Turn overdue follow-up into a structured financial workflow."
+              items={[
+                "Automated reminders",
+                "Overdue tracking",
+                "Reminder stages",
+                "Timezone-aware scheduling",
+              ]}
+            />
+
+            <FeatureCard
+              icon={TrendingUp}
+              title="Financial intelligence"
+              text="See the financial health of the business and the behavior of your customers."
+              items={[
+                "Risk scoring",
+                "Customer financial summaries",
+                "Dashboard analytics",
+                "Action history",
               ]}
             />
 
             <FeatureCard
               icon={MessageSquare}
-              eyebrow="02"
-              title="Collections"
-              description="Follow up automatically and keep customer conversations connected to the money they owe."
+              title="WhatsApp"
+              text="Bring financial communication into the channel customers already use."
               items={[
-                "WhatsApp follow-ups",
-                "Overdue reminders",
-                "Customer replies",
-                "Payment promises",
+                "Invoice delivery",
+                "Customer follow-up",
+                "WhatsApp messaging",
+                "Customer conversations",
               ]}
             />
 
             <FeatureCard
-              icon={BarChart3}
-              eyebrow="03"
-              title="Financial visibility"
-              description="Know what is paid, overdue, at risk and what deserves your attention today."
+              icon={Bot}
+              title="Customer AI"
+              text="Give customers a conversational way to understand their invoices and financial status."
               items={[
-                "Outstanding balances",
-                "Payment history",
-                "Customer risk signals",
-                "Daily financial summary",
+                "Invoice questions",
+                "Outstanding balance",
+                "Payment-plan context",
+                "Customer-specific context",
+              ]}
+            />
+
+            <FeatureCard
+              icon={FileCheck2}
+              title="AI actions & approvals"
+              text="Let AI operate the business while keeping high-impact actions under your control."
+              items={[
+                "AI financial tools",
+                "Approval workflows",
+                "Action audit trail",
+                "State validation",
               ]}
             />
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ──────────────────────────────────────────────────────────────
-            WHATSAPP + CUSTOMER AI
-        ────────────────────────────────────────────────────────────── */}
-        <section className="border-y border-white/10">
-          <div className="mx-auto max-w-7xl px-6 py-28 lg:px-8 lg:py-36">
-            <div className="grid gap-14 lg:grid-cols-[1fr_0.9fr] lg:items-center">
-              <div>
-                <div className="mb-5 text-xs font-medium uppercase tracking-[0.22em] text-emerald-400/80">
-                  The conversation continues
-                </div>
-
-                <h2 className="max-w-2xl text-4xl font-semibold leading-[1] tracking-[-0.055em] sm:text-5xl">
-                  Your customer does not need another portal.
-                  <br />
-                  <span className="text-emerald-400">They already have WhatsApp.</span>
-                </h2>
-
-                <p className="mt-6 max-w-xl text-base leading-7 text-white/40">
-                  Haseel can take the financial conversation directly to where
-                  your customers already communicate. It can send invoices,
-                  follow up, understand replies and capture payment promises
-                  or requests for flexibility.
-                </p>
-
-                <div className="mt-8 space-y-3">
-                  {[
-                    "Invoice delivered through WhatsApp",
-                    "Personalized payment reminders",
-                    "Understand customer responses",
-                    "Capture promises and payment requests",
-                  ].map((item) => (
-                    <div
-                      key={item}
-                      className="flex items-center gap-3 text-sm text-white/55"
-                    >
-                      <div className="flex size-5 items-center justify-center rounded-full bg-emerald-400/10">
-                        <Check className="size-3 text-emerald-400" />
-                      </div>
-
-                      {item}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* WhatsApp mockup */}
-              <div className="mx-auto w-full max-w-md">
-                <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#080b09] shadow-2xl shadow-black/50">
-                  <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
-                    <div className="flex size-9 items-center justify-center rounded-full bg-emerald-400/10">
-                      <MessageSquare className="size-4 text-emerald-400" />
-                    </div>
-
-                    <div>
-                      <div className="text-sm font-medium">Haseel</div>
-                      <div className="text-[10px] text-white/20">
-                        financial assistant
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 p-5">
-                    <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white/[0.035] p-4">
-                      <div className="text-[10px] uppercase tracking-[0.16em] text-white/20">
-                        Haseel
-                      </div>
-
-                      <p className="mt-2 text-sm leading-6 text-white/60">
-                        Hi Ahmed. Invoice INV-014 for AED 8,500 is due today.
-                        Would you like the payment link?
-                      </p>
-                    </div>
-
-                    <div className="ml-auto max-w-[75%] rounded-2xl rounded-tr-md bg-emerald-400/[0.08] p-4">
-                      <p className="text-sm leading-6 text-white/65">
-                        I can pay next Tuesday.
-                      </p>
-                    </div>
-
-                    <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white/[0.035] p-4">
-                      <div className="flex items-center gap-2 text-[10px] text-emerald-300">
-                        <Sparkles className="size-3" />
-                        Haseel understands
-                      </div>
-
-                      <p className="mt-2 text-sm leading-6 text-white/60">
-                        Got it. I recorded your payment promise for Tuesday
-                        and will keep the invoice on track.
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-                      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-white/20">
-                        Customer memory
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-2 gap-3">
-                        <div>
-                          <div className="text-[10px] text-white/20">
-                            Payment behavior
-                          </div>
-                          <div className="mt-1 text-xs text-white/45">
-                            Usually pays within 5 days
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="text-[10px] text-white/20">
-                            Current promise
-                          </div>
-                          <div className="mt-1 text-xs text-emerald-300">
-                            Tuesday
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ──────────────────────────────────────────────────────────────
-            AI CONTROL
-        ────────────────────────────────────────────────────────────── */}
-        <section className="mx-auto max-w-7xl px-6 py-28 lg:px-8 lg:py-36">
-          <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
+      <section>
+        <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-28">
+          <div className="grid items-center gap-14 lg:grid-cols-[0.95fr_1.05fr]">
             <div>
-              <div className="mb-5 text-xs font-medium uppercase tracking-[0.22em] text-emerald-400/80">
-                AI, with guardrails
-              </div>
-
-              <h2 className="text-4xl font-semibold leading-[1] tracking-[-0.055em] sm:text-5xl">
-                Give AI the work.
-                <br />
-                Keep the control.
+              <SectionEyebrow>AI financial employee</SectionEyebrow>
+              <h2 className="mt-5 max-w-2xl text-4xl font-semibold leading-tight tracking-[-0.04em] sm:text-5xl">
+                Not just a chatbot.
+                <span className="block text-emerald-300">
+                  A system that can actually do the work.
+                </span>
               </h2>
 
-              <p className="mt-6 max-w-xl text-base leading-7 text-white/40">
-                Haseel is designed to act, not just answer. But important
-                financial decisions can remain under your control.
+              <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-400">
+                Haseel connects AI to real financial operations. It can
+                understand business context, use financial tools, follow
+                company policies and execute supported actions.
+              </p>
+
+              <div className="mt-8 space-y-4">
+                <CapabilityRow
+                  title="Understands"
+                  text="Customers, invoices, payments, overdue balances, payment plans and business policies."
+                />
+                <CapabilityRow
+                  title="Decides"
+                  text="Uses context, rules and action permissions to determine the appropriate next step."
+                />
+                <CapabilityRow
+                  title="Acts"
+                  text="Creates, records, updates, sends and manages supported financial operations."
+                />
+                <CapabilityRow
+                  title="Remembers"
+                  text="Retains customer-level financial memory and operational history."
+                />
+              </div>
+            </div>
+
+            <AIConversationMockup />
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-white/6 bg-[#091610]">
+        <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-28">
+          <div className="grid gap-14 lg:grid-cols-[0.82fr_1.18fr]">
+            <div>
+              <SectionEyebrow>Built for control</SectionEyebrow>
+              <h2 className="mt-5 text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
+                AI should work for you.
+                <span className="block text-emerald-300">
+                  Not around you.
+                </span>
+              </h2>
+              <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-400">
+                Haseel separates routine operations from actions that deserve
+                human oversight.
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-3">
               <ControlCard
-                title="Auto"
-                description="Routine actions can be handled automatically."
-                items={[
-                  "Create customers",
-                  "Create invoices",
-                  "Record payments",
-                  "Read financial data",
+                label="AUTO"
+                title="Routine work"
+                text="Low-risk supported actions can run automatically."
+                examples={[
+                  "Create records",
+                  "Calculate balances",
+                  "Save customer memory",
+                  "Prepare financial summaries",
                 ]}
               />
 
               <ControlCard
-                active
-                title="Approval"
-                description="Sensitive actions pause until you approve."
-                items={[
-                  "Send invoices",
-                  "Send reminders",
-                  "Create payment plans",
-                  "Reverse payments",
+                label="APPROVAL"
+                title="Review first"
+                text="Important external or financial actions can wait for your approval."
+                examples={[
+                  "Send invoice",
+                  "Send reminder",
+                  "Create payment plan",
+                  "Reverse payment",
                 ]}
+                featured
               />
 
               <ControlCard
-                title="Human only"
-                description="Some actions are never delegated to AI."
-                items={[
+                label="HUMAN ONLY"
+                title="Stay human"
+                text="High-impact actions remain outside autonomous execution."
+                examples={[
                   "Write-offs",
-                  "Delete customers",
-                  "Delete invoices",
+                  "Destructive actions",
+                  "Sensitive financial decisions",
+                  "Other restricted operations",
                 ]}
               />
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ──────────────────────────────────────────────────────────────
-            FUTURE
-        ────────────────────────────────────────────────────────────── */}
-        <section
-          id="future"
-          className="border-y border-white/10 bg-white/[0.015]"
-        >
-          <div className="mx-auto max-w-7xl px-6 py-28 lg:px-8 lg:py-36">
-            <div className="mx-auto max-w-2xl text-center">
-              <div className="mb-5 text-xs font-medium uppercase tracking-[0.22em] text-emerald-400/80">
-                What comes next
-              </div>
+      <section>
+        <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-28">
+          <div className="grid overflow-hidden rounded-3xl border border-emerald-400/10 bg-gradient-to-br from-[#102219] via-[#0b1812] to-[#08100c] shadow-2xl shadow-black/20 lg:grid-cols-[0.86fr_1.14fr]">
+            <div className="p-8 sm:p-10 lg:p-12">
+              <SectionEyebrow>WhatsApp + customer AI</SectionEyebrow>
 
-              <h2 className="text-4xl font-semibold leading-[1] tracking-[-0.055em] sm:text-5xl">
-                Haseel is becoming
-                <br />
-                an operating system for financial work.
+              <h2 className="mt-5 max-w-xl text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
+                Financial operations where the customer already is.
               </h2>
 
-              <p className="mt-6 text-base leading-7 text-white/35">
-                The goal is bigger than invoices. Haseel is being built to
-                become the intelligent layer between your business, your
-                customers and your money.
+              <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-400">
+                Haseel V1 brings invoice delivery and financial follow-up into
+                WhatsApp, while keeping the business logic and financial record
+                inside Haseel.
               </p>
+
+              <div className="mt-9 space-y-4">
+                <MiniBullet text="Send invoices through WhatsApp" />
+                <MiniBullet text="Follow up on overdue payments" />
+                <MiniBullet text="Receive customer replies" />
+                <MiniBullet text="Record payment promises" />
+                <MiniBullet text="Maintain customer financial context" />
+              </div>
             </div>
 
-            <div className="mt-16 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <WhatsAppMockup />
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-white/6 bg-[#091610]">
+        <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-28">
+          <div className="max-w-3xl">
+            <SectionEyebrow>The first version</SectionEyebrow>
+            <h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
+              Haseel V1 is the beginning, not the final product.
+            </h2>
+            <p className="mt-6 text-lg leading-8 text-zinc-400">
+              We are starting with the financial operating layer: the systems
+              and workflows that sit between customers, invoices, payments and
+              collections.
+            </p>
+          </div>
+
+          <div className="mt-14 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="rounded-3xl border border-white/8 bg-white/[0.025] p-7 sm:p-9">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">Available in V1</div>
+                  <div className="text-xs text-zinc-500">
+                    The operating foundation
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                {[
+                  "Customer management",
+                  "Customer memory",
+                  "Invoice creation & tracking",
+                  "PDF invoices",
+                  "Payment recording",
+                  "Payment balances",
+                  "Payment plans & installments",
+                  "Payment promises",
+                  "Automated reminders",
+                  "WhatsApp invoice delivery",
+                  "Customer AI",
+                  "Risk intelligence",
+                  "AI financial actions",
+                  "Approval workflows",
+                  "Audit & action history",
+                  "Dashboard analytics",
+                ].map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-center gap-3 rounded-xl border border-white/6 bg-black/10 px-4 py-3 text-sm text-zinc-300"
+                  >
+                    <Check className="h-4 w-4 shrink-0 text-emerald-300" />
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/8 bg-gradient-to-b from-white/[0.035] to-white/[0.015] p-7 sm:p-9">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/6 text-zinc-300">
+                  <ArrowDownRight className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">Coming next</div>
+                  <div className="text-xs text-zinc-500">
+                    The broader financial operating system
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 space-y-3">
+                <FutureRow
+                  icon={Landmark}
+                  title="Banking connectivity"
+                  text="Connect Haseel to more of the financial infrastructure."
+                />
+                <FutureRow
+                  icon={CircleDollarSign}
+                  title="Payments & collection infrastructure"
+                  text="Move closer to the actual movement of money."
+                />
+                <FutureRow
+                  icon={BarChart3}
+                  title="Cash-flow intelligence"
+                  text="Turn financial data into forward-looking decisions."
+                />
+                <FutureRow
+                  icon={FileCheck2}
+                  title="Accounting & tax workflows"
+                  text="Reduce the operational gap between finance and compliance."
+                />
+                <FutureRow
+                  icon={TrendingUp}
+                  title="Financing"
+                  text="Connect eligible businesses and receivables to financing pathways."
+                />
+                <FutureRow
+                  icon={Bot}
+                  title="AI financial teams"
+                  text="Move from one AI employee to specialized financial agents."
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-32">
+          <div className="relative overflow-hidden rounded-[2rem] border border-emerald-400/10 bg-gradient-to-br from-emerald-500/[0.12] via-white/[0.025] to-transparent p-8 sm:p-12 lg:p-16">
+            <div className="pointer-events-none absolute right-[-8rem] top-[-8rem] h-72 w-72 rounded-full bg-emerald-400/10 blur-[80px]" />
+
+            <div className="relative max-w-4xl">
+              <div className="text-sm font-medium uppercase tracking-[0.2em] text-emerald-300">
+                Haseel V1
+              </div>
+
+              <h2 className="mt-5 text-4xl font-semibold leading-tight tracking-[-0.04em] sm:text-5xl lg:text-6xl">
+                From invoices to financial operations.
+              </h2>
+
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-300">
+                Haseel is building the financial operating system for modern
+                small businesses and freelancers — starting with the work that
+                happens every day between a customer, an invoice and a payment.
+              </p>
+
+              <div className="mt-9">
+                <Link to={primaryHref}>
+                  <Button className="h-12 rounded-xl bg-emerald-400 px-6 text-sm font-semibold text-[#07110d] hover:bg-emerald-300">
+                    Explore Haseel
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-white/6">
+        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8 text-sm text-zinc-500 sm:px-10 md:flex-row md:items-center md:justify-between lg:px-12">
+          <div>
+            <div className="font-semibold text-zinc-200">Haseel</div>
+            <div className="mt-1">
+              AI-native financial operations for modern businesses.
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            <Link className="transition hover:text-white" to="/dashboard">
+              Dashboard
+            </Link>
+            <Link className="transition hover:text-white" to="/clients">
+              Clients
+            </Link>
+            <Link className="transition hover:text-white" to="/invoices">
+              Invoices
+            </Link>
+            <Link className="transition hover:text-white" to="/payments">
+              Payments
+            </Link>
+          </div>
+        </div>
+      </footer>
+    </main>
+  );
+}
+
+function Header({ primaryHref }: { primaryHref: "/auth" | "/dashboard" }) {
+  return (
+    <header className="sticky top-0 z-40 border-b border-white/6 bg-[#07110d]/85 backdrop-blur-xl">
+      <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-6 sm:px-10 lg:px-12">
+        <Link to="/" className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400 text-[#07110d]">
+            <CircleDollarSign className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="text-[15px] font-semibold tracking-tight">Haseel</div>
+            <div className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+              Financial AI
+            </div>
+          </div>
+        </Link>
+
+        <nav className="hidden items-center gap-7 text-sm text-zinc-400 md:flex">
+          <a className="transition hover:text-white" href="#how-it-works">
+            How it works
+          </a>
+          <a className="transition hover:text-white" href="#product">
+            Product
+          </a>
+          <a className="transition hover:text-white" href="#v1">
+            V1
+          </a>
+          <Link className="transition hover:text-white" to="/auth">
+            Sign in
+          </Link>
+        </nav>
+
+        <Link to={primaryHref}>
+          <Button className="h-10 rounded-lg bg-white px-4 text-sm font-semibold text-[#07110d] hover:bg-zinc-200">
+            {primaryHref === "/dashboard" ? "Open Haseel" : "Start free"}
+          </Button>
+        </Link>
+      </div>
+    </header>
+  );
+}
+
+function HeroProductMockup() {
+  return (
+    <div className="relative">
+      <div className="absolute inset-x-8 top-8 h-full rounded-[2rem] bg-emerald-400/10 blur-3xl" />
+
+      <div className="relative overflow-hidden rounded-[1.8rem] border border-white/10 bg-[#0b1711] shadow-[0_30px_100px_rgba(0,0,0,0.45)]">
+        <div className="flex items-center justify-between border-b border-white/7 px-4 py-3 sm:px-5">
+          <div className="flex items-center gap-2">
+            <div className="h-2.5 w-2.5 rounded-full bg-white/15" />
+            <div className="h-2.5 w-2.5 rounded-full bg-white/15" />
+            <div className="h-2.5 w-2.5 rounded-full bg-white/15" />
+          </div>
+          <div className="rounded-lg border border-white/7 bg-white/[0.02] px-3 py-1.5 text-[10px] text-zinc-500">
+            app.haseel.ai
+          </div>
+          <div className="w-16" />
+        </div>
+
+        <div className="grid min-h-[510px] grid-cols-[72px_1fr] sm:grid-cols-[150px_1fr]">
+          <div className="border-r border-white/7 bg-white/[0.015] p-3 sm:p-4">
+            <div className="mb-6 flex h-8 items-center justify-center rounded-lg bg-emerald-400/10 text-emerald-300">
+              <CircleDollarSign className="h-4 w-4" />
+            </div>
+
+            <div className="space-y-2">
               {[
-                {
-                  icon: Wallet,
-                  title: "Payments",
-                  text: "More ways for customers to pay and more automation around collection.",
-                },
-                {
-                  icon: Receipt,
-                  title: "Accounting",
-                  text: "Financial records, reconciliation and reporting connected to operations.",
-                },
-                {
-                  icon: TrendingUp,
-                  title: "Cash flow",
-                  text: "Understand what is coming, what is at risk and what needs action.",
-                },
-                {
-                  icon: Bot,
-                  title: "AI employees",
-                  text: "Specialized AI workers handling different parts of your business.",
-                },
-              ].map((item) => {
-                const Icon = item.icon;
+                ["Dashboard", BarChart3],
+                ["Clients", Users],
+                ["Invoices", FileText],
+                ["Payments", Wallet],
+                ["AI", Bot],
+              ].map(([label, Icon]) => {
+                const I = Icon as typeof BarChart3;
 
                 return (
                   <div
-                    key={item.title}
-                    className="rounded-2xl border border-white/10 bg-[#090c0a] p-6"
+                    key={String(label)}
+                    className={`flex items-center gap-2 rounded-lg px-2 py-2 text-[11px] ${
+                      label === "Dashboard"
+                        ? "bg-white/6 text-white"
+                        : "text-zinc-600"
+                    }`}
                   >
-                    <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-400/[0.07]">
-                      <Icon className="size-4 text-emerald-400" />
-                    </div>
-
-                    <h3 className="mt-5 text-base font-medium">
-                      {item.title}
-                    </h3>
-
-                    <p className="mt-2 text-sm leading-6 text-white/25">
-                      {item.text}
-                    </p>
+                    <I className="h-3.5 w-3.5 shrink-0" />
+                    <span className="hidden sm:block">{String(label)}</span>
                   </div>
                 );
               })}
             </div>
           </div>
-        </section>
 
-        {/* ──────────────────────────────────────────────────────────────
-            FINAL CTA
-        ────────────────────────────────────────────────────────────── */}
-        <section className="mx-auto max-w-7xl px-6 py-28 lg:px-8 lg:py-36">
-          <div className="relative overflow-hidden rounded-[2rem] border border-emerald-400/15 bg-emerald-400/[0.035] px-6 py-16 text-center sm:px-10 lg:py-24">
-            <div className="pointer-events-none absolute left-1/2 top-[-10rem] h-[25rem] w-[25rem] -translate-x-1/2 rounded-full bg-emerald-400/[0.09] blur-[100px]" />
+          <div className="p-4 sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-600">
+                  Monday · 09:32
+                </div>
+                <div className="mt-2 text-lg font-semibold text-white sm:text-xl">
+                  Good morning.
+                </div>
+                <div className="mt-1 text-xs text-zinc-500">
+                  Here is what needs your attention.
+                </div>
+              </div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300">
+                <Bot className="h-4 w-4" />
+              </div>
+            </div>
 
-            <div className="relative">
-              <Sparkles className="mx-auto size-5 text-emerald-400" />
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <MetricCard label="Outstanding" value="AED 84.5k" />
+              <MetricCard label="Overdue" value="AED 26.8k" />
+              <MetricCard label="Customers" value="128" />
+            </div>
 
-              <h2 className="mx-auto mt-6 max-w-3xl text-4xl font-semibold leading-[0.98] tracking-[-0.06em] sm:text-5xl lg:text-6xl">
-                Stop managing your financial work manually.
-              </h2>
+            <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+              <div className="flex items-center gap-2 text-xs font-medium text-zinc-300">
+                <Sparkles className="h-3.5 w-3.5 text-emerald-300" />
+                Haseel AI
+              </div>
 
-              <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-white/40">
-                Start with invoices and collections. Let Haseel take more of
-                the work as your business grows.
+              <p className="mt-3 text-sm leading-6 text-zinc-300">
+                I found{" "}
+                <span className="font-semibold text-white">7 overdue invoices</span>{" "}
+                totaling{" "}
+                <span className="font-semibold text-white">AED 26,800</span>.
               </p>
 
-              <div className="mt-9 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-                <Button
-                  asChild
-                  size="lg"
-                  className="h-12 rounded-full bg-emerald-400 px-8 text-black hover:bg-emerald-300"
-                >
-                  <Link to={authPath}>
-                    {signedIn ? "Open Haseel" : "Start free"}
-                    <ArrowRight className="ml-2 size-4" />
-                  </Link>
-                </Button>
+              <div className="mt-4 rounded-xl border border-emerald-400/10 bg-emerald-400/[0.05] p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-medium text-zinc-200">
+                      Suggested action
+                    </div>
+                    <div className="mt-1 text-[11px] text-zinc-500">
+                      Prepare reminders for 4 customers
+                    </div>
+                  </div>
+                  <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-300">
+                    Approval
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                <Link
-                  to="/auth"
-                  className="text-sm text-white/30 transition hover:text-white"
-                >
-                  Already have an account? Sign in
-                </Link>
+            <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-zinc-300">
+                  Recent activity
+                </div>
+                <div className="text-[10px] text-zinc-600">View all</div>
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {[
+                  "Payment recorded · AED 4,500",
+                  "Invoice H-1048 sent on WhatsApp",
+                  "Customer promise saved · Tuesday",
+                ].map((text) => (
+                  <div
+                    key={text}
+                    className="flex items-center gap-2 rounded-lg bg-white/[0.02] px-3 py-2 text-[11px] text-zinc-500"
+                  >
+                    <Check className="h-3 w-3 text-emerald-300" />
+                    {text}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
-        </section>
-      </main>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-      {/* ──────────────────────────────────────────────────────────────
-          FOOTER
-      ────────────────────────────────────────────────────────────── */}
-      <footer className="border-t border-white/10">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8 sm:flex-row sm:items-center sm:justify-between lg:px-8">
+function AIConversationMockup() {
+  return (
+    <div className="relative">
+      <div className="rounded-[1.8rem] border border-white/8 bg-[#0b1711] p-4 shadow-[0_30px_100px_rgba(0,0,0,0.32)] sm:p-5">
+        <div className="flex items-center justify-between border-b border-white/7 pb-4">
           <div className="flex items-center gap-3">
-            <div className="flex size-8 items-center justify-center rounded-lg border border-emerald-400/15 bg-emerald-400/[0.05]">
-              <Sparkles className="size-3.5 text-emerald-400" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
+              <Bot className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold">Haseel AI</div>
+              <div className="mt-0.5 text-xs text-zinc-600">
+                Financial operations
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-full border border-emerald-400/15 bg-emerald-400/[0.05] px-2.5 py-1 text-[10px] font-medium text-emerald-300">
+            Online
+          </div>
+        </div>
+
+        <div className="space-y-4 py-5">
+          <ChatBubble
+            role="you"
+            text="Show me overdue invoices and tell me who needs a follow-up."
+          />
+
+          <ChatBubble
+            role="haseel"
+            text="I found 7 overdue invoices totaling AED 26,800."
+          />
+
+          <div className="rounded-2xl border border-white/7 bg-white/[0.025] p-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-emerald-300" />
+              <span className="text-xs font-medium text-zinc-300">
+                Customer risk summary
+              </span>
             </div>
 
-            <span className="text-sm font-semibold">Haseel</span>
+            <div className="mt-4 space-y-2">
+              <SummaryLine label="Low risk" value="4" />
+              <SummaryLine label="Medium risk" value="2" />
+              <SummaryLine label="High risk" value="1" />
+            </div>
           </div>
 
-          <div className="text-xs text-white/20">
-            AI-native financial operations.
-          </div>
+          <ChatBubble
+            role="haseel"
+            text="I prepared reminders for 4 customers. Sending them requires your approval."
+          />
 
-          <div className="text-xs text-white/20">© 2026 Haseel</div>
+          <ChatBubble
+            role="you"
+            text="Approve."
+          />
+
+          <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.045] p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-xs font-semibold text-emerald-100">
+                  4 reminders sent
+                </div>
+                <div className="mt-1 text-[11px] leading-5 text-zinc-500">
+                  Action recorded in Haseel activity history.
+                </div>
+              </div>
+              <Check className="h-5 w-5 text-emerald-300" />
+            </div>
+          </div>
         </div>
-      </footer>
+
+        <div className="rounded-xl border border-white/7 bg-black/10 px-4 py-3 text-xs text-zinc-600">
+          Ask Haseel anything about your financial operations…
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WhatsAppMockup() {
+  return (
+    <div className="flex min-h-full items-center justify-center border-t border-white/7 bg-black/10 p-6 sm:p-8 lg:border-l lg:border-t-0 lg:p-10">
+      <div className="w-full max-w-md overflow-hidden rounded-[2rem] border border-white/8 bg-[#0b1711] shadow-[0_25px_80px_rgba(0,0,0,0.35)]">
+        <div className="flex items-center justify-between border-b border-white/7 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300">
+              <MessageSquare className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold">Haseel</div>
+              <div className="text-[10px] text-zinc-600">WhatsApp</div>
+            </div>
+          </div>
+          <div className="text-[10px] text-zinc-600">09:41</div>
+        </div>
+
+        <div className="space-y-3 bg-[#09130e] p-4">
+          <div className="ml-auto max-w-[82%] rounded-2xl rounded-tr-md bg-emerald-400 px-4 py-3 text-xs leading-5 text-[#07110d]">
+            I received the invoice. Can I pay on Tuesday?
+          </div>
+
+          <div className="max-w-[84%] rounded-2xl rounded-tl-md border border-white/7 bg-white/[0.04] px-4 py-3 text-xs leading-5 text-zinc-300">
+            Yes. I can record Tuesday as your payment promise.
+          </div>
+
+          <div className="ml-auto max-w-[82%] rounded-2xl rounded-tr-md bg-emerald-400 px-4 py-3 text-xs leading-5 text-[#07110d]">
+            Please do that.
+          </div>
+
+          <div className="max-w-[88%] rounded-2xl rounded-tl-md border border-emerald-400/10 bg-emerald-400/[0.04] px-4 py-3">
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+              <Check className="h-3 w-3" />
+              Haseel action
+            </div>
+
+            <div className="mt-2 text-xs leading-5 text-zinc-300">
+              Payment promise saved for Tuesday.
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/7 bg-white/[0.02] p-3">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-600">
+              Customer memory
+            </div>
+            <div className="mt-1 text-xs text-zinc-400">
+              Customer prefers structured payment dates.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProblemCard({
+  icon: Icon,
+  title,
+  text,
+}: {
+  icon: typeof Receipt;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/7 bg-white/[0.02] p-6 transition hover:border-white/12 hover:bg-white/[0.03]">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
+        <Icon className="h-5 w-5" />
+      </div>
+      <h3 className="mt-5 text-base font-semibold">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-zinc-500">{text}</p>
     </div>
   );
 }
 
 function FeatureCard({
   icon: Icon,
-  eyebrow,
   title,
-  description,
+  text,
   items,
 }: {
-  icon: typeof FileText;
-  eyebrow: string;
+  icon: typeof Users;
   title: string;
-  description: string;
+  text: string;
   items: string[];
 }) {
   return (
-    <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.02] p-7 transition duration-300 hover:-translate-y-1 hover:border-emerald-400/15 hover:bg-emerald-400/[0.025]">
-      <div className="flex items-center justify-between">
-        <div className="flex size-11 items-center justify-center rounded-xl bg-emerald-400/[0.07]">
-          <Icon className="size-4 text-emerald-400" />
-        </div>
-
-        <span className="text-[10px] font-medium tracking-[0.2em] text-white/15">
-          {eyebrow}
-        </span>
+    <div className="rounded-3xl border border-white/7 bg-white/[0.02] p-6 sm:p-7">
+      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
+        <Icon className="h-5 w-5" />
       </div>
 
-      <h3 className="mt-7 text-xl font-medium tracking-[-0.03em]">{title}</h3>
+      <h3 className="mt-5 text-lg font-semibold tracking-tight">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-zinc-500">{text}</p>
 
-      <p className="mt-3 text-sm leading-6 text-white/35">{description}</p>
-
-      <div className="mt-7 space-y-3">
+      <div className="mt-6 space-y-2.5">
         {items.map((item) => (
-          <div key={item} className="flex items-start gap-3 text-sm text-white/50">
-            <Check className="mt-0.5 size-4 shrink-0 text-emerald-400" />
-            <span>{item}</span>
+          <div
+            key={item}
+            className="flex items-center gap-2 text-sm text-zinc-400"
+          >
+            <div className="h-1.5 w-1.5 rounded-full bg-emerald-300/80" />
+            {item}
           </div>
         ))}
       </div>
@@ -1006,55 +1036,209 @@ function FeatureCard({
   );
 }
 
-function ControlCard({
+function StepCard({
+  number,
+  icon: Icon,
   title,
-  description,
-  items,
-  active = false,
+  text,
+  example,
 }: {
+  number: string;
+  icon: typeof MessageSquare;
   title: string;
-  description: string;
-  items: string[];
-  active?: boolean;
+  text: string;
+  example: string;
+}) {
+  return (
+    <div className="relative rounded-3xl border border-white/7 bg-white/[0.02] p-6 sm:p-7">
+      <div className="flex items-center justify-between">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-zinc-300">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="text-xs font-medium tracking-[0.18em] text-zinc-700">
+          {number}
+        </div>
+      </div>
+
+      <h3 className="mt-6 text-lg font-semibold">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-zinc-500">{text}</p>
+
+      <div className="mt-6 rounded-xl border border-white/6 bg-black/10 px-3 py-2.5 text-xs leading-5 text-zinc-400">
+        {example}
+      </div>
+    </div>
+  );
+}
+
+function ControlCard({
+  label,
+  title,
+  text,
+  examples,
+  featured = false,
+}: {
+  label: string;
+  title: string;
+  text: string;
+  examples: string[];
+  featured?: boolean;
 }) {
   return (
     <div
-      className={`rounded-2xl border p-6 ${
-        active
-          ? "border-emerald-400/20 bg-emerald-400/[0.04]"
-          : "border-white/10 bg-white/[0.02]"
+      className={`rounded-3xl border p-6 ${
+        featured
+          ? "border-emerald-400/20 bg-emerald-400/[0.055]"
+          : "border-white/7 bg-white/[0.02]"
       }`}
     >
-      <div className="flex items-center justify-between">
-        <span
-          className={`text-sm font-medium ${
-            active ? "text-emerald-300" : "text-white"
-          }`}
-        >
-          {title}
-        </span>
-
-        {active && (
-          <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[9px] uppercase tracking-[0.14em] text-emerald-300">
-            Recommended
-          </span>
-        )}
+      <div
+        className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-[0.16em] ${
+          featured
+            ? "bg-emerald-400/10 text-emerald-300"
+            : "bg-white/5 text-zinc-500"
+        }`}
+      >
+        {label}
       </div>
 
-      <p className="mt-3 text-xs leading-5 text-white/25">{description}</p>
+      <h3 className="mt-5 text-lg font-semibold">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-zinc-500">{text}</p>
 
-      <div className="mt-5 space-y-2">
-        {items.map((item) => (
-          <div key={item} className="flex items-start gap-2 text-xs text-white/45">
+      <div className="mt-6 space-y-2.5">
+        {examples.map((example) => (
+          <div
+            key={example}
+            className="flex items-start gap-2 text-xs leading-5 text-zinc-400"
+          >
             <Check
-              className={`mt-0.5 size-3.5 ${
-                active ? "text-emerald-400" : "text-white/20"
+              className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${
+                featured ? "text-emerald-300" : "text-zinc-600"
               }`}
             />
-            <span>{item}</span>
+            {example}
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function CapabilityRow({
+  title,
+  text,
+}: {
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="flex gap-4 border-b border-white/6 pb-4">
+      <div className="w-20 shrink-0 text-sm font-semibold text-emerald-300">
+        {title}
+      </div>
+      <div className="text-sm leading-6 text-zinc-500">{text}</div>
+    </div>
+  );
+}
+
+function ChatBubble({
+  role,
+  text,
+}: {
+  role: "you" | "haseel";
+  text: string;
+}) {
+  const isYou = role === "you";
+
+  return (
+    <div
+      className={`flex ${
+        isYou ? "justify-end" : "justify-start"
+      }`}
+    >
+      <div
+        className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 ${
+          isYou
+            ? "rounded-tr-md bg-emerald-400 text-[#07110d]"
+            : "rounded-tl-md border border-white/7 bg-white/[0.035] text-zinc-300"
+        }`}
+      >
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function SummaryLine({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="text-zinc-500">{label}</span>
+      <span className="font-medium text-zinc-300">{value}</span>
+    </div>
+  );
+}
+
+function MiniBullet({ text }: { text: string }) {
+  return (
+    <div className="flex items-center gap-3 text-sm text-zinc-300">
+      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300">
+        <Check className="h-3.5 w-3.5" />
+      </div>
+      {text}
+    </div>
+  );
+}
+
+function FutureRow({
+  icon: Icon,
+  title,
+  text,
+}: {
+  icon: typeof Landmark;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/6 bg-white/[0.02] p-4">
+      <div className="flex gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/5 text-zinc-400">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div>
+          <div className="text-sm font-medium text-zinc-300">{title}</div>
+          <div className="mt-1 text-xs leading-5 text-zinc-600">{text}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/7 bg-white/[0.02] p-3">
+      <div className="text-[9px] uppercase tracking-[0.15em] text-zinc-600">
+        {label}
+      </div>
+      <div className="mt-2 text-sm font-semibold text-white">{value}</div>
+    </div>
+  );
+}
+
+function SectionEyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+      {children}
     </div>
   );
 }
