@@ -226,19 +226,13 @@ export const saveReminderSettingsFn = createServerFn({
           .upsert(
             {
               owner_id: ownerId,
-              bank_name:
-                data.payment.bank_name || null,
-              account_name:
-                data.payment.account_name || null,
-              account_number:
-                data.payment.account_number || null,
-              iban:
-                data.payment.iban || null,
-              swift_bic:
-                data.payment.swift_bic || null,
-              payment_instructions:
-                data.payment.payment_instructions ||
-                null,
+bank_name: data.payment?.bank_name || null,
+account_name: data.payment?.account_name || null,
+account_number: data.payment?.account_number || null,
+iban: data.payment?.iban || null,
+swift_bic: data.payment?.swift_bic || null,
+payment_instructions:
+  data.payment?.payment_instructions || null,
             },
             {
               onConflict: "owner_id",
