@@ -488,7 +488,293 @@ async function tryDeterministicRead(
     normalizeForIntent(
       message,
     );
+const asks90DayCashflow =
+  (normalized.includes("cashflow") ||
+    normalized.includes("cash flow")) &&
+  (
+    normalized.includes("90") ||
+    normalized.includes("three months") ||
+    normalized.includes("3 months") ||
+    normalized.includes("next quarter") ||
+    normalized.includes("expected cashflow") ||
+    normalized.includes("expected cash flow")
+  );
 
+if (asks90DayCashflow) {
+  const today = new Date();
+  const todayIso = today.toISOString().slice(0, 10);
+
+  const end = new Date(today);
+  end.setUTCDate(end.getUTCDate() + 90);
+  const endIso = end.toISOString().slice(0, 10);
+
+  const [
+    { data: invoices, error: invoiceError },
+    { data: installments, error: installmentError },
+  ] = await Promise.all([
+    ctx.supabase
+      .from("invoices")
+      .select(
+        "id,invoice_number,remaining_balance,currency,status,due_date",
+      )
+      .eq("owner_id", ctx.userId)
+      .gt("remaining_balance", 0)
+      .lte("due_date", endIso),
+
+    ctx.supabase
+      .from("payment_plan_installments")
+      .select(
+        "id,seq,due_date,amount,paid_amount,status,plan_id,payment_plans(invoice_id,currency,status)",
+      )
+      .eq("owner_id", ctx.userId)
+      .in("status", [
+        "pending",
+        "partial",
+        "overdue",
+      ])
+      .lte("due_date", endIso),
+  ]);
+
+  if (invoiceError) {
+    throw new Error(
+      `Failed to load invoices for cashflow forecast: ${invoiceError.message}`,
+    );
+  }
+
+  if (installmentError) {
+    throw new Error(
+      `Failed to load payment-plan installments for cashflow forecast: ${installmentError.message}`,
+    );
+  }
+
+  const currencyBuckets = new Map<
+    string,
+    {
+      overdue: number;
+      days30: number;
+      days60: number;
+      days90: number;
+      invoices: number;
+      installments: number;
+    }
+  >();
+
+  const ensureBucket = (currency: string) => {
+    const key =
+      currency?.trim() || "AED";
+
+    const existing =
+      currencyBuckets.get(key);
+
+    if (existing) {
+      return existing;
+    }
+
+    const bucket = {
+      overdue: 0,
+      days30: 0,
+      days60: 0,
+      days90: 0,
+      invoices: 0,
+      installments: 0,
+    };
+
+    currencyBuckets.set(
+      key,
+      bucket,
+    );
+
+    return bucket;
+  };
+
+  const addAmount = (
+    currency: string,
+    dueDate: string,
+    amount: number,
+    source: "invoice" | "installment",
+  ) => {
+    if (!(amount > 0)) return;
+
+    const bucket =
+      ensureBucket(currency);
+
+    if (dueDate < todayIso) {
+      bucket.overdue += amount;
+    } else {
+      const due = new Date(
+        `${dueDate}T00:00:00.000Z`,
+      );
+
+      const diffDays = Math.floor(
+        (due.getTime() -
+          today.getTime()) /
+          86_400_000,
+      );
+
+      if (diffDays <= 30) {
+        bucket.days30 += amount;
+      } else if (diffDays <= 60) {
+        bucket.days60 += amount;
+      } else {
+        bucket.days90 += amount;
+      }
+    }
+
+    if (source === "invoice") {
+      bucket.invoices += 1;
+    } else {
+      bucket.installments += 1;
+    }
+  };
+
+  const planInvoiceIds =
+    new Set<string>();
+
+  for (const row of installments ?? []) {
+    const plan = Array.isArray(
+      row.payment_plans,
+    )
+      ? row.payment_plans[0]
+      : row.payment_plans;
+
+    if (
+      plan?.invoice_id &&
+      (
+        plan.status === "active" ||
+        plan.status === "at_risk"
+      )
+    ) {
+      planInvoiceIds.add(
+        String(plan.invoice_id),
+      );
+    }
+  }
+
+  for (const invoice of invoices ?? []) {
+    if (
+      !invoice.due_date ||
+      planInvoiceIds.has(
+        String(invoice.id),
+      )
+    ) {
+      continue;
+    }
+
+    const excluded =
+      new Set([
+        "draft",
+        "cancelled",
+        "void",
+        "paid",
+      ]);
+
+    if (
+      excluded.has(
+        String(invoice.status),
+      )
+    ) {
+      continue;
+    }
+
+    addAmount(
+      String(
+        invoice.currency ?? "AED",
+      ),
+      String(invoice.due_date).slice(
+        0,
+        10,
+      ),
+      Number(
+        invoice.remaining_balance ?? 0,
+      ),
+      "invoice",
+    );
+  }
+
+  for (const installment of installments ?? []) {
+    const plan = Array.isArray(
+      installment.payment_plans,
+    )
+      ? installment.payment_plans[0]
+      : installment.payment_plans;
+
+    if (
+      !plan ||
+      !(
+        plan.status === "active" ||
+        plan.status === "at_risk"
+      )
+    ) {
+      continue;
+    }
+
+    const outstanding =
+      Math.max(
+        0,
+        Number(
+          installment.amount ?? 0,
+        ) -
+          Number(
+            installment.paid_amount ?? 0,
+          ),
+      );
+
+    addAmount(
+      String(
+        plan.currency ?? "AED",
+      ),
+      String(
+        installment.due_date,
+      ).slice(0, 10),
+      outstanding,
+      "installment",
+    );
+  }
+
+  if (
+    currencyBuckets.size === 0
+  ) {
+    return (
+      "Expected cashflow for the next 90 days:\n\n" +
+      "No expected receivable cash inflows are currently scheduled in the next 90 days."
+    );
+  }
+
+  const lines = [
+    "Expected cashflow for the next 90 days:",
+    "",
+  ];
+
+  for (const [
+    currency,
+    bucket,
+  ] of currencyBuckets) {
+    const total =
+      bucket.overdue +
+      bucket.days30 +
+      bucket.days60 +
+      bucket.days90;
+
+    lines.push(
+      `${currency}`,
+      `- Overdue / immediate: ${currency} ${bucket.overdue.toLocaleString()}`,
+      `- Next 30 days: ${currency} ${bucket.days30.toLocaleString()}`,
+      `- Days 31–60: ${currency} ${bucket.days60.toLocaleString()}`,
+      `- Days 61–90: ${currency} ${bucket.days90.toLocaleString()}`,
+      `- Total expected: ${currency} ${total.toLocaleString()}`,
+      "",
+      `- Source: ${bucket.invoices} invoices, ${bucket.installments} payment-plan installments`,
+      "",
+    );
+  }
+
+  lines.push(
+    "This is a due-date-based receivables forecast, not a guarantee of collection.",
+    "It does not include expenses or future sales that have not yet been invoiced.",
+  );
+
+  return lines.join("\n");
+}
   const asksActivePaymentPlan =
     normalized.includes(
       "current active payment plan",
