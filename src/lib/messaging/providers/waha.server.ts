@@ -34,13 +34,39 @@ function getConfig() {
   };
 }
 
+/**
+ * Normalize a phone number to the format expected by WAHA:
+ *
+ *   971501234567@c.us
+ *
+ * Supported input examples:
+ *
+ *   +971501234567
+ *   00971501234567
+ *   971501234567
+ *
+ * The international country code must remain present.
+ */
 function normalizeChatId(
   phone: string,
 ): string {
-  const digits = phone.replace(
+  let digits = phone.replace(
     /\D/g,
     "",
   );
+
+  /*
+   * Convert international dialing prefix 00
+   * to the plain international number.
+   *
+   * Example:
+   * 00971501234567
+   * becomes
+   * 971501234567
+   */
+  if (digits.startsWith("00")) {
+    digits = digits.slice(2);
+  }
 
   if (!/^\d{8,15}$/.test(digits)) {
     throw new Error(
@@ -117,11 +143,19 @@ export async function resolveWahaPhoneFromLid(
       return null;
     }
 
-    const phone =
+    let phone =
       data.pn?.replace(
         /\D/g,
         "",
       ) || "";
+
+    /*
+     * LID resolution may also return a phone
+     * using the international 00 prefix.
+     */
+    if (phone.startsWith("00")) {
+      phone = phone.slice(2);
+    }
 
     if (
       !/^\d{8,15}$/.test(phone)
@@ -253,9 +287,7 @@ function extractWahaError(
     const parts =
       candidates
         .filter(
-          (
-            item,
-          ) =>
+          (item) =>
             typeof item ===
               "string" &&
             item.trim(),
@@ -300,12 +332,7 @@ async function sendWahaRequest(
       "[WAHA] Sending request",
       {
         endpoint,
-        body: {
-          ...body,
-          /*
-           * Do not log API keys or other credentials.
-           */
-        },
+        body,
       },
     );
 
@@ -418,14 +445,24 @@ export const wahaWhatsAppProvider: MessagingProvider =
         session,
       } = getConfig();
 
+      const chatId =
+        normalizeChatId(
+          input.to,
+        );
+
+      console.log(
+        "[WAHA] Normalized WhatsApp chatId",
+        {
+          input: input.to,
+          chatId,
+        },
+      );
+
       return sendWahaRequest(
         "/api/sendText",
         {
           session,
-          chatId:
-            normalizeChatId(
-              input.to,
-            ),
+          chatId,
           text: input.body,
         },
       );
@@ -438,14 +475,24 @@ export const wahaWhatsAppProvider: MessagingProvider =
         session,
       } = getConfig();
 
+      const chatId =
+        normalizeChatId(
+          input.to,
+        );
+
+      console.log(
+        "[WAHA] Normalized WhatsApp document chatId",
+        {
+          input: input.to,
+          chatId,
+        },
+      );
+
       return sendWahaRequest(
         "/api/sendFile",
         {
           session,
-          chatId:
-            normalizeChatId(
-              input.to,
-            ),
+          chatId,
           caption:
             input.body || "",
           file: {
