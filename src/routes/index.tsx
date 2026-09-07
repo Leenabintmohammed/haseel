@@ -23,8 +23,9 @@ import {
   Zap,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -43,7 +44,7 @@ export const Route = createFileRoute("/")({
       {
         property: "og:description",
         content:
-          "The first release of Haseel brings invoices, payments, collections, customer memory, payment plans, reminders, WhatsApp and AI financial operations into one system.",
+          "Haseel V1 brings invoices, payments, collections, customer memory, payment plans, reminders, WhatsApp and AI financial operations into one system.",
       },
     ],
   }),
@@ -88,6 +89,7 @@ function LandingPage() {
 
       <Header primaryHref={primaryHref} />
 
+      {/* HERO */}
       <section className="relative">
         <div className="mx-auto max-w-7xl px-6 pb-20 pt-14 sm:px-10 sm:pb-28 sm:pt-20 lg:px-12 lg:pt-28">
           <div className="grid items-center gap-14 lg:grid-cols-[1.02fr_0.98fr] lg:gap-16">
@@ -132,10 +134,12 @@ function LandingPage() {
                   <Check className="h-4 w-4 text-emerald-300" />
                   Built for small businesses
                 </span>
+
                 <span className="inline-flex items-center gap-2">
                   <Check className="h-4 w-4 text-emerald-300" />
                   AI-native from the start
                 </span>
+
                 <span className="inline-flex items-center gap-2">
                   <Check className="h-4 w-4 text-emerald-300" />
                   WhatsApp-ready
@@ -150,17 +154,20 @@ function LandingPage() {
 
       <TrustBar />
 
+      {/* WHY HASEEL */}
       <section className="border-y border-white/6 bg-[#091610]">
         <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12">
           <div className="grid gap-16 lg:grid-cols-[0.72fr_1.28fr]">
             <div>
               <SectionEyebrow>Why Haseel</SectionEyebrow>
+
               <h2 className="mt-5 max-w-xl text-4xl font-semibold leading-tight tracking-[-0.035em] sm:text-5xl">
                 Accounting tells you what happened.
                 <span className="block text-emerald-300">
                   Haseel helps you act.
                 </span>
               </h2>
+
               <p className="mt-6 max-w-lg text-base leading-7 text-zinc-400">
                 Most financial software is built around recording transactions.
                 Haseel is built around operating the business around those
@@ -174,16 +181,19 @@ function LandingPage() {
                 title="Invoices"
                 text="Create, calculate, send and track invoices without moving between disconnected tools."
               />
+
               <ProblemCard
                 icon={CircleDollarSign}
                 title="Payments"
                 text="Know what has been paid, what remains outstanding and what changed."
               />
+
               <ProblemCard
                 icon={MessageSquare}
                 title="Collections"
                 text="Follow up with customers through timely reminders instead of manually chasing every payment."
               />
+
               <ProblemCard
                 icon={Bot}
                 title="AI operations"
@@ -194,13 +204,16 @@ function LandingPage() {
         </div>
       </section>
 
+      {/* HOW IT WORKS */}
       <section id="how-it-works">
         <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-28">
           <div className="max-w-3xl">
             <SectionEyebrow>How Haseel works</SectionEyebrow>
+
             <h2 className="mt-5 text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
               From a conversation to a financial action.
             </h2>
+
             <p className="mt-6 text-lg leading-8 text-zinc-400">
               Haseel combines financial data, business rules, customer context
               and AI tools into one operating loop.
@@ -215,6 +228,7 @@ function LandingPage() {
               text="Ask Haseel what you need in natural language."
               example={`"Show me all overdue invoices."`}
             />
+
             <StepCard
               number="02"
               icon={Workflow}
@@ -222,6 +236,7 @@ function LandingPage() {
               text="Haseel reads the relevant financial and customer context."
               example="7 invoices • AED 84,500 outstanding"
             />
+
             <StepCard
               number="03"
               icon={Zap}
@@ -229,6 +244,7 @@ function LandingPage() {
               text="It performs supported actions according to your company rules."
               example="Prepare 4 customer follow-ups"
             />
+
             <StepCard
               number="04"
               icon={ShieldCheck}
@@ -240,13 +256,16 @@ function LandingPage() {
         </div>
       </section>
 
-      <section className="border-y border-white/6 bg-[#0a1610]">
+      {/* PRODUCT */}
+      <section id="product" className="border-y border-white/6 bg-[#0a1610]">
         <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-28">
           <div className="flex max-w-3xl flex-col gap-5">
             <SectionEyebrow>Inside Haseel V1</SectionEyebrow>
+
             <h2 className="text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
               One financial operating layer.
             </h2>
+
             <p className="text-lg leading-8 text-zinc-400">
               V1 focuses on the core operational problems that happen between
               creating an invoice and actually getting paid.
@@ -365,11 +384,13 @@ function LandingPage() {
         </div>
       </section>
 
+      {/* AI EMPLOYEE */}
       <section>
         <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-28">
           <div className="grid items-center gap-14 lg:grid-cols-[0.95fr_1.05fr]">
             <div>
               <SectionEyebrow>AI financial employee</SectionEyebrow>
+
               <h2 className="mt-5 max-w-2xl text-4xl font-semibold leading-tight tracking-[-0.04em] sm:text-5xl">
                 Not just a chatbot.
                 <span className="block text-emerald-300">
@@ -388,14 +409,17 @@ function LandingPage() {
                   title="Understands"
                   text="Customers, invoices, payments, overdue balances, payment plans and business policies."
                 />
+
                 <CapabilityRow
                   title="Decides"
                   text="Uses context, rules and action permissions to determine the appropriate next step."
                 />
+
                 <CapabilityRow
                   title="Acts"
                   text="Creates, records, updates, sends and manages supported financial operations."
                 />
+
                 <CapabilityRow
                   title="Remembers"
                   text="Retains customer-level financial memory and operational history."
@@ -408,17 +432,20 @@ function LandingPage() {
         </div>
       </section>
 
+      {/* CONTROL */}
       <section className="border-y border-white/6 bg-[#091610]">
         <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-28">
           <div className="grid gap-14 lg:grid-cols-[0.82fr_1.18fr]">
             <div>
               <SectionEyebrow>Built for control</SectionEyebrow>
+
               <h2 className="mt-5 text-4xl font-semibold tracking-[-0.035em] sm:text-5xl">
                 AI should work for you.
                 <span className="block text-emerald-300">
                   Not around you.
                 </span>
               </h2>
+
               <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-400">
                 Haseel separates routine operations from actions that deserve
                 human oversight.
@@ -467,6 +494,7 @@ function LandingPage() {
         </div>
       </section>
 
+      {/* WHATSAPP */}
       <section>
         <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-28">
           <div className="grid overflow-hidden rounded-3xl border border-emerald-400/10 bg-gradient-to-br from-[#102219] via-[#0b1812] to-[#08100c] shadow-2xl shadow-black/20 lg:grid-cols-[0.86fr_1.14fr]">
@@ -497,13 +525,16 @@ function LandingPage() {
         </div>
       </section>
 
-      <section className="border-y border-white/6 bg-[#091610]">
+      {/* V1 */}
+      <section id="v1" className="border-y border-white/6 bg-[#091610]">
         <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-28">
           <div className="max-w-3xl">
             <SectionEyebrow>The first version</SectionEyebrow>
+
             <h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
               Haseel V1 is the beginning, not the final product.
             </h2>
+
             <p className="mt-6 text-lg leading-8 text-zinc-400">
               We are starting with the financial operating layer: the systems
               and workflows that sit between customers, invoices, payments and
@@ -517,6 +548,7 @@ function LandingPage() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
                   <Sparkles className="h-5 w-5" />
                 </div>
+
                 <div>
                   <div className="text-sm font-semibold">Available in V1</div>
                   <div className="text-xs text-zinc-500">
@@ -560,6 +592,7 @@ function LandingPage() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/6 text-zinc-300">
                   <ArrowDownRight className="h-5 w-5" />
                 </div>
+
                 <div>
                   <div className="text-sm font-semibold">Coming next</div>
                   <div className="text-xs text-zinc-500">
@@ -574,26 +607,31 @@ function LandingPage() {
                   title="Banking connectivity"
                   text="Connect Haseel to more of the financial infrastructure."
                 />
+
                 <FutureRow
                   icon={CircleDollarSign}
                   title="Payments & collection infrastructure"
                   text="Move closer to the actual movement of money."
                 />
+
                 <FutureRow
                   icon={BarChart3}
                   title="Cash-flow intelligence"
                   text="Turn financial data into forward-looking decisions."
                 />
+
                 <FutureRow
                   icon={FileCheck2}
                   title="Accounting & tax workflows"
                   text="Reduce the operational gap between finance and compliance."
                 />
+
                 <FutureRow
                   icon={TrendingUp}
                   title="Financing"
                   text="Connect eligible businesses and receivables to financing pathways."
                 />
+
                 <FutureRow
                   icon={Bot}
                   title="AI financial teams"
@@ -605,6 +643,7 @@ function LandingPage() {
         </div>
       </section>
 
+      {/* FINAL CTA */}
       <section>
         <div className="mx-auto max-w-7xl px-6 py-24 sm:px-10 lg:px-12 lg:py-32">
           <div className="relative overflow-hidden rounded-[2rem] border border-emerald-400/10 bg-gradient-to-br from-emerald-500/[0.12] via-white/[0.025] to-transparent p-8 sm:p-12 lg:p-16">
@@ -638,6 +677,7 @@ function LandingPage() {
         </div>
       </section>
 
+      {/* FOOTER */}
       <footer className="border-t border-white/6">
         <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8 text-sm text-zinc-500 sm:px-10 md:flex-row md:items-center md:justify-between lg:px-12">
           <div>
@@ -651,12 +691,15 @@ function LandingPage() {
             <Link className="transition hover:text-white" to="/dashboard">
               Dashboard
             </Link>
+
             <Link className="transition hover:text-white" to="/clients">
               Clients
             </Link>
+
             <Link className="transition hover:text-white" to="/invoices">
               Invoices
             </Link>
+
             <Link className="transition hover:text-white" to="/payments">
               Payments
             </Link>
@@ -667,7 +710,15 @@ function LandingPage() {
   );
 }
 
-function Header({ primaryHref }: { primaryHref: "/auth" | "/dashboard" }) {
+/* -------------------------------------------------------------------------- */
+/* HEADER                                                                     */
+/* -------------------------------------------------------------------------- */
+
+function Header({
+  primaryHref,
+}: {
+  primaryHref: "/auth" | "/dashboard";
+}) {
   return (
     <header className="sticky top-0 z-40 border-b border-white/6 bg-[#07110d]/85 backdrop-blur-xl">
       <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-6 sm:px-10 lg:px-12">
@@ -675,8 +726,12 @@ function Header({ primaryHref }: { primaryHref: "/auth" | "/dashboard" }) {
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400 text-[#07110d]">
             <CircleDollarSign className="h-5 w-5" />
           </div>
+
           <div>
-            <div className="text-[15px] font-semibold tracking-tight">Haseel</div>
+            <div className="text-[15px] font-semibold tracking-tight">
+              Haseel
+            </div>
+
             <div className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
               Financial AI
             </div>
@@ -684,15 +739,27 @@ function Header({ primaryHref }: { primaryHref: "/auth" | "/dashboard" }) {
         </Link>
 
         <nav className="hidden items-center gap-7 text-sm text-zinc-400 md:flex">
-          <a className="transition hover:text-white" href="#how-it-works">
+          <a
+            className="transition hover:text-white"
+            href="#how-it-works"
+          >
             How it works
           </a>
-          <a className="transition hover:text-white" href="#product">
+
+          <a
+            className="transition hover:text-white"
+            href="#product"
+          >
             Product
           </a>
-          <a className="transition hover:text-white" href="#v1">
+
+          <a
+            className="transition hover:text-white"
+            href="#v1"
+          >
             V1
           </a>
+
           <Link className="transition hover:text-white" to="/auth">
             Sign in
           </Link>
@@ -708,6 +775,68 @@ function Header({ primaryHref }: { primaryHref: "/auth" | "/dashboard" }) {
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* TRUST BAR                                                                  */
+/* -------------------------------------------------------------------------- */
+
+function TrustBar() {
+  const items = [
+    {
+      icon: ShieldCheck,
+      title: "Business-first",
+      text: "Built around real financial operations",
+    },
+    {
+      icon: Bot,
+      title: "AI-native",
+      text: "AI that can understand and act",
+    },
+    {
+      icon: MessageSquare,
+      title: "WhatsApp",
+      text: "Customer communication where it happens",
+    },
+    {
+      icon: Workflow,
+      title: "Connected workflows",
+      text: "Invoices, payments and collections together",
+    },
+  ];
+
+  return (
+    <section className="border-y border-white/6 bg-black/10">
+      <div className="mx-auto max-w-7xl px-6 py-7 sm:px-10 lg:px-12">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {items.map(({ icon: Icon, title, text }) => (
+            <div
+              key={title}
+              className="flex items-center gap-3 rounded-2xl border border-white/6 bg-white/[0.02] px-4 py-3"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
+                <Icon className="h-4 w-4" />
+              </div>
+
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-zinc-200">
+                  {title}
+                </div>
+
+                <div className="mt-0.5 text-[11px] leading-4 text-zinc-600">
+                  {text}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* HERO MOCKUP                                                                */
+/* -------------------------------------------------------------------------- */
+
 function HeroProductMockup() {
   return (
     <div className="relative">
@@ -720,9 +849,11 @@ function HeroProductMockup() {
             <div className="h-2.5 w-2.5 rounded-full bg-white/15" />
             <div className="h-2.5 w-2.5 rounded-full bg-white/15" />
           </div>
+
           <div className="rounded-lg border border-white/7 bg-white/[0.02] px-3 py-1.5 text-[10px] text-zinc-500">
             app.haseel.ai
           </div>
+
           <div className="w-16" />
         </div>
 
@@ -752,7 +883,9 @@ function HeroProductMockup() {
                     }`}
                   >
                     <I className="h-3.5 w-3.5 shrink-0" />
-                    <span className="hidden sm:block">{String(label)}</span>
+                    <span className="hidden sm:block">
+                      {String(label)}
+                    </span>
                   </div>
                 );
               })}
@@ -765,13 +898,16 @@ function HeroProductMockup() {
                 <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-600">
                   Monday · 09:32
                 </div>
+
                 <div className="mt-2 text-lg font-semibold text-white sm:text-xl">
                   Good morning.
                 </div>
+
                 <div className="mt-1 text-xs text-zinc-500">
                   Here is what needs your attention.
                 </div>
               </div>
+
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300">
                 <Bot className="h-4 w-4" />
               </div>
@@ -791,9 +927,14 @@ function HeroProductMockup() {
 
               <p className="mt-3 text-sm leading-6 text-zinc-300">
                 I found{" "}
-                <span className="font-semibold text-white">7 overdue invoices</span>{" "}
+                <span className="font-semibold text-white">
+                  7 overdue invoices
+                </span>{" "}
                 totaling{" "}
-                <span className="font-semibold text-white">AED 26,800</span>.
+                <span className="font-semibold text-white">
+                  AED 26,800
+                </span>
+                .
               </p>
 
               <div className="mt-4 rounded-xl border border-emerald-400/10 bg-emerald-400/[0.05] p-3">
@@ -802,10 +943,12 @@ function HeroProductMockup() {
                     <div className="text-xs font-medium text-zinc-200">
                       Suggested action
                     </div>
+
                     <div className="mt-1 text-[11px] text-zinc-500">
                       Prepare reminders for 4 customers
                     </div>
                   </div>
+
                   <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-300">
                     Approval
                   </div>
@@ -818,7 +961,10 @@ function HeroProductMockup() {
                 <div className="text-xs font-medium text-zinc-300">
                   Recent activity
                 </div>
-                <div className="text-[10px] text-zinc-600">View all</div>
+
+                <div className="text-[10px] text-zinc-600">
+                  View all
+                </div>
               </div>
 
               <div className="mt-3 space-y-2">
@@ -844,6 +990,10 @@ function HeroProductMockup() {
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* AI CONVERSATION                                                            */
+/* -------------------------------------------------------------------------- */
+
 function AIConversationMockup() {
   return (
     <div className="relative">
@@ -853,6 +1003,7 @@ function AIConversationMockup() {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
               <Bot className="h-5 w-5" />
             </div>
+
             <div>
               <div className="text-sm font-semibold">Haseel AI</div>
               <div className="mt-0.5 text-xs text-zinc-600">
@@ -880,6 +1031,7 @@ function AIConversationMockup() {
           <div className="rounded-2xl border border-white/7 bg-white/[0.025] p-4">
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-emerald-300" />
+
               <span className="text-xs font-medium text-zinc-300">
                 Customer risk summary
               </span>
@@ -897,10 +1049,7 @@ function AIConversationMockup() {
             text="I prepared reminders for 4 customers. Sending them requires your approval."
           />
 
-          <ChatBubble
-            role="you"
-            text="Approve."
-          />
+          <ChatBubble role="you" text="Approve." />
 
           <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.045] p-4">
             <div className="flex items-center justify-between gap-4">
@@ -908,10 +1057,12 @@ function AIConversationMockup() {
                 <div className="text-xs font-semibold text-emerald-100">
                   4 reminders sent
                 </div>
+
                 <div className="mt-1 text-[11px] leading-5 text-zinc-500">
                   Action recorded in Haseel activity history.
                 </div>
               </div>
+
               <Check className="h-5 w-5 text-emerald-300" />
             </div>
           </div>
@@ -925,6 +1076,10 @@ function AIConversationMockup() {
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* WHATSAPP MOCKUP                                                            */
+/* -------------------------------------------------------------------------- */
+
 function WhatsAppMockup() {
   return (
     <div className="flex min-h-full items-center justify-center border-t border-white/7 bg-black/10 p-6 sm:p-8 lg:border-l lg:border-t-0 lg:p-10">
@@ -934,12 +1089,18 @@ function WhatsAppMockup() {
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300">
               <MessageSquare className="h-4 w-4" />
             </div>
+
             <div>
               <div className="text-xs font-semibold">Haseel</div>
-              <div className="text-[10px] text-zinc-600">WhatsApp</div>
+              <div className="text-[10px] text-zinc-600">
+                WhatsApp
+              </div>
             </div>
           </div>
-          <div className="text-[10px] text-zinc-600">09:41</div>
+
+          <div className="text-[10px] text-zinc-600">
+            09:41
+          </div>
         </div>
 
         <div className="space-y-3 bg-[#09130e] p-4">
@@ -970,6 +1131,7 @@ function WhatsAppMockup() {
             <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-600">
               Customer memory
             </div>
+
             <div className="mt-1 text-xs text-zinc-400">
               Customer prefers structured payment dates.
             </div>
@@ -979,6 +1141,10 @@ function WhatsAppMockup() {
     </div>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* SMALL COMPONENTS                                                           */
+/* -------------------------------------------------------------------------- */
 
 function ProblemCard({
   icon: Icon,
@@ -994,8 +1160,14 @@ function ProblemCard({
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
         <Icon className="h-5 w-5" />
       </div>
-      <h3 className="mt-5 text-base font-semibold">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-zinc-500">{text}</p>
+
+      <h3 className="mt-5 text-base font-semibold">
+        {title}
+      </h3>
+
+      <p className="mt-2 text-sm leading-6 text-zinc-500">
+        {text}
+      </p>
     </div>
   );
 }
@@ -1017,8 +1189,13 @@ function FeatureCard({
         <Icon className="h-5 w-5" />
       </div>
 
-      <h3 className="mt-5 text-lg font-semibold tracking-tight">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-zinc-500">{text}</p>
+      <h3 className="mt-5 text-lg font-semibold tracking-tight">
+        {title}
+      </h3>
+
+      <p className="mt-2 text-sm leading-6 text-zinc-500">
+        {text}
+      </p>
 
       <div className="mt-6 space-y-2.5">
         {items.map((item) => (
@@ -1054,13 +1231,19 @@ function StepCard({
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-zinc-300">
           <Icon className="h-5 w-5" />
         </div>
+
         <div className="text-xs font-medium tracking-[0.18em] text-zinc-700">
           {number}
         </div>
       </div>
 
-      <h3 className="mt-6 text-lg font-semibold">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-zinc-500">{text}</p>
+      <h3 className="mt-6 text-lg font-semibold">
+        {title}
+      </h3>
+
+      <p className="mt-2 text-sm leading-6 text-zinc-500">
+        {text}
+      </p>
 
       <div className="mt-6 rounded-xl border border-white/6 bg-black/10 px-3 py-2.5 text-xs leading-5 text-zinc-400">
         {example}
@@ -1100,8 +1283,13 @@ function ControlCard({
         {label}
       </div>
 
-      <h3 className="mt-5 text-lg font-semibold">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-zinc-500">{text}</p>
+      <h3 className="mt-5 text-lg font-semibold">
+        {title}
+      </h3>
+
+      <p className="mt-2 text-sm leading-6 text-zinc-500">
+        {text}
+      </p>
 
       <div className="mt-6 space-y-2.5">
         {examples.map((example) => (
@@ -1111,9 +1299,12 @@ function ControlCard({
           >
             <Check
               className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${
-                featured ? "text-emerald-300" : "text-zinc-600"
+                featured
+                  ? "text-emerald-300"
+                  : "text-zinc-600"
               }`}
             />
+
             {example}
           </div>
         ))}
@@ -1134,7 +1325,10 @@ function CapabilityRow({
       <div className="w-20 shrink-0 text-sm font-semibold text-emerald-300">
         {title}
       </div>
-      <div className="text-sm leading-6 text-zinc-500">{text}</div>
+
+      <div className="text-sm leading-6 text-zinc-500">
+        {text}
+      </div>
     </div>
   );
 }
@@ -1176,8 +1370,13 @@ function SummaryLine({
 }) {
   return (
     <div className="flex items-center justify-between text-xs">
-      <span className="text-zinc-500">{label}</span>
-      <span className="font-medium text-zinc-300">{value}</span>
+      <span className="text-zinc-500">
+        {label}
+      </span>
+
+      <span className="font-medium text-zinc-300">
+        {value}
+      </span>
     </div>
   );
 }
@@ -1188,6 +1387,7 @@ function MiniBullet({ text }: { text: string }) {
       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300">
         <Check className="h-3.5 w-3.5" />
       </div>
+
       {text}
     </div>
   );
@@ -1208,9 +1408,15 @@ function FutureRow({
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/5 text-zinc-400">
           <Icon className="h-4 w-4" />
         </div>
+
         <div>
-          <div className="text-sm font-medium text-zinc-300">{title}</div>
-          <div className="mt-1 text-xs leading-5 text-zinc-600">{text}</div>
+          <div className="text-sm font-medium text-zinc-300">
+            {title}
+          </div>
+
+          <div className="mt-1 text-xs leading-5 text-zinc-600">
+            {text}
+          </div>
         </div>
       </div>
     </div>
@@ -1229,12 +1435,19 @@ function MetricCard({
       <div className="text-[9px] uppercase tracking-[0.15em] text-zinc-600">
         {label}
       </div>
-      <div className="mt-2 text-sm font-semibold text-white">{value}</div>
+
+      <div className="mt-2 text-sm font-semibold text-white">
+        {value}
+      </div>
     </div>
   );
 }
 
-function SectionEyebrow({ children }: { children: React.ReactNode }) {
+function SectionEyebrow({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
       {children}
