@@ -21,14 +21,16 @@ const reminderSettingsSchema = z.object({
   serious_start_day: z.number().int().min(0).max(365),
 });
 
-const paymentSettingsSchema = z.object({
-  bank_name: z.string().trim().max(200).nullable(),
-  account_name: z.string().trim().max(200).nullable(),
-  account_number: z.string().trim().max(100).nullable(),
-  iban: z.string().trim().max(100).nullable(),
-  swift_bic: z.string().trim().max(50).nullable(),
-  payment_instructions: z.string().trim().max(1000).nullable(),
-});
+const paymentSettingsSchema = z
+  .object({
+    bank_name: z.string().trim().max(200).nullable(),
+    account_name: z.string().trim().max(200).nullable(),
+    account_number: z.string().trim().max(100).nullable(),
+    iban: z.string().trim().max(100).nullable(),
+    swift_bic: z.string().trim().max(50).nullable(),
+    payment_instructions: z.string().trim().max(1000).nullable(),
+  })
+  .nullable();
 
 export type ReminderWorkspaceSettings = {
   reminder: ReminderSettings;
