@@ -21,11 +21,11 @@ BEGIN
   WHERE owner_id = NEW.owner_id
     AND COALESCE(is_demo, false) = false;
 
-  IF invoice_count >= 3 THEN
+  IF invoice_count >= 25 THEN
     RAISE EXCEPTION USING
       ERRCODE = 'check_violation',
       MESSAGE = 'INVOICE_LIMIT_REACHED',
-      DETAIL = 'This account can have up to 3 non-demo invoices.';
+      DETAIL = 'This account can have up to 25 non-demo invoices.';
   END IF;
 
   RETURN NEW;
