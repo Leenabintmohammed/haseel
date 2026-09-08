@@ -2074,9 +2074,14 @@ export async function runOrchestrator(args: {
 
         tools,
 
-        stopWhen:
-          stepCountIs(8),
-      });
+stopWhen:
+  stepCountIs(2),
+
+maxRetries:
+  0,
+
+maxOutputTokens:
+  512,
 
     reply =
       result.text?.trim() ||
