@@ -248,12 +248,12 @@ export async function executeTool(name: string, params: Record<string, unknown>,
     );
   }
 
-  if ((invoiceCount ?? 0) >= 3) {
+  if ((invoiceCount ?? 0) >= 25) {
     return fail(
       "limit_reached",
-      "MVP invoice limit reached. This account can have up to 3 invoices.",
+      "MVP invoice limit reached. This account can have up to 25 invoices.",
       {
-        limit: 3,
+        limit: 25,
         used: invoiceCount ?? 0,
       },
     );
