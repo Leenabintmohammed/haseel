@@ -399,10 +399,10 @@ export async function executeTool(name: string, params: Record<string, unknown>,
     ) {
       return fail(
         "limit_reached",
-        "MVP invoice limit reached. This account can have up to 3 invoices.",
+        "MVP invoice limit reached. This account can have up to 25 invoices.",
         {
-          limit: 3,
-          used: 3,
+          limit: 25,
+          used: 25,
         },
       );
     }
