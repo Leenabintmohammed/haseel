@@ -1,5 +1,5 @@
 -- Haseel MVP
--- Maximum of 3 non-demo invoices per account.
+-- Maximum of 25 non-demo invoices per account.
 
 CREATE OR REPLACE FUNCTION public.enforce_invoice_limit()
 RETURNS TRIGGER
