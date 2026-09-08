@@ -105,7 +105,6 @@ async function buildContext(
     summary,
     { data: clients },
     { data: notifications },
-    risk,
   ] = await Promise.all([
     ctx.supabase
       .from("profiles")
@@ -433,8 +432,7 @@ async function buildContext(
         notifications ?? []
       ).slice(0, 15),
 
-    at_risk_clients:
-      risk.clients,
+    at_risk_clients: [],
 
     today:
       new Date()
