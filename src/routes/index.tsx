@@ -723,9 +723,6 @@ function Header({
     <header className="sticky top-0 z-40 border-b border-white/6 bg-[#07110d]/85 backdrop-blur-xl">
       <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-6 sm:px-10 lg:px-12">
         <Link to="/" className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400 text-[#07110d]">
-            <CircleDollarSign className="h-5 w-5" />
-          </div>
 
           <div>
             <div className="text-[15px] font-semibold tracking-tight">
