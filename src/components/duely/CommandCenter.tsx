@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   duelyChat,
   resolveAction,
+  getConversationHistory,
   type PendingAction,
 } from "@/lib/ai.functions";
 import { useDuely } from "@/lib/duely-context";
@@ -55,8 +56,9 @@ export function CommandCenter({
 
   const queryClient = useQueryClient();
 
-  const chat = useServerFn(duelyChat);
-  const resolve = useServerFn(resolveAction);
+const chat = useServerFn(duelyChat);
+const resolve = useServerFn(resolveAction);
+const loadHistory = useServerFn(getConversationHistory);
 
 const [sessionId] = useState(() => {
   const key = "haseel:duely:session";
@@ -84,7 +86,43 @@ const [sessionId] = useState(() => {
       inputRef.current?.focus();
     }
   }, [prefill, setPrefill]);
+  
+useEffect(() => {
+  let cancelled = false;
 
+  loadHistory({
+    data: {
+      session_id: sessionId,
+    },
+  })
+    .then((result) => {
+      if (cancelled) return;
+
+      setMessages(
+        result.messages
+          .filter(
+            (row) =>
+              row.role === "user" ||
+              row.role === "assistant",
+          )
+          .map((row) => ({
+            id: row.id,
+            role: row.role as "user" | "assistant",
+            text: row.message,
+          })),
+      );
+    })
+    .catch((error) => {
+      console.error(
+        "[Haseel] conversation history load failed",
+        error,
+      );
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [loadHistory, sessionId]);
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
