@@ -21,6 +21,7 @@ import {
   Wallet,
   Workflow,
   Zap,
+  Sparkle,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
