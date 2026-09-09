@@ -58,7 +58,19 @@ export function CommandCenter({
   const chat = useServerFn(duelyChat);
   const resolve = useServerFn(resolveAction);
 
-  const [sessionId] = useState(() => crypto.randomUUID());
+const [sessionId] = useState(() => {
+  const key = "haseel:duely:session";
+  const existing = localStorage.getItem(key);
+
+  if (existing) {
+    return existing;
+  }
+
+  const id = crypto.randomUUID();
+  localStorage.setItem(key, id);
+  return id;
+});
+  
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
 
