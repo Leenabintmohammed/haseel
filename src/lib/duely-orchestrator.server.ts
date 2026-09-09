@@ -2070,7 +2070,7 @@ export async function runOrchestrator(args: {
         tools,
 
 stopWhen:
-  stepCountIs(2),
+  stepCountIs(4),
 
 maxRetries:
   0,
