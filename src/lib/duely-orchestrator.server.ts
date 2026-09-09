@@ -147,8 +147,6 @@ async function buildContext(
         ascending: false,
       })
       .limit(50),
-
-    atRiskClients(ctx),
   ]);
 
   let focusDetail: unknown =
