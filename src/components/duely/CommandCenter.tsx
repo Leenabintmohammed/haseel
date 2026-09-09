@@ -29,6 +29,14 @@ function newId() {
   return Math.random().toString(36).slice(2);
 }
 
+function formatAssistantText(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/gs, "$1")
+    .replace(/__(.*?)__/gs, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
 export function CommandCenter({
   className,
 }: {
@@ -451,8 +459,9 @@ export function CommandCenter({
                     : "text-foreground",
                 )}
               >
-                {m.text}
-              </div>
+                {m.role === "assistant"
+  ? formatAssistantText(m.text)
+  : m.text}              </div>
             </div>
           ),
         )}
