@@ -496,7 +496,38 @@ case "send_invoice":
       return "Action completed successfully.";
   }
 }
+export const getConversationHistory = createServerFn({
+  method: "POST",
+})
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        session_id: z.string().uuid(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: messages, error } = await context.supabase
+      .from("ai_conversations")
+      .select("id, role, message, created_at")
+      .eq("owner_id", context.userId)
+      .eq("session_id", data.session_id)
+      .order("created_at", {
+        ascending: true,
+      })
+      .limit(100);
 
+    if (error) {
+      throw new Error(
+        `Failed to load conversation history: ${error.message}`,
+      );
+    }
+
+    return {
+      messages: messages ?? [],
+    };
+  });
 export const duelyChat = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => ChatInput.parse(input))
